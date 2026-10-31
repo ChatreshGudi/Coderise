@@ -10,3 +10,5 @@ Thumbs.db
 .venv/
 __pycache__/
 *.py[cod]
+
+reports/
