@@ -51,3 +51,17 @@ Docker remains available as an alternative reproducible environment. Copy .env.e
 Docker uses a separate PostgreSQL 16 container and persistent postgres_data volume. It is a different database from local PostgreSQL 17; stop one if both need port 5432. docker compose down preserves the volume, while docker compose down -v deletes it.
 
 Docker initialization scripts run only when its data directory is empty. For an existing Docker volume, apply schema changes manually.
+## Import a real user's public history
+
+First, apply the submission-statistics migration once to the local coderise database:
+
+1. Select coderise in pgAdmin and open Tools > Query Tool.
+2. Open db/migrations/002_submission_tag_stats.sql and execute it (F5).
+
+Then import a handle's current public profile, rating history, and up to the most recent 2,000 submissions:
+
+    py scripts/import_codeforces_user.py your_cf_handle
+
+The importer uses Codeforces user.info, user.rating, and user.status. It waits between calls to respect the public API interval. Submissions are upserted by Codeforces submission ID, so rerunning the import will not count the same judged submission twice. Pending verdicts are stored but do not affect tag statistics until a later import sees their final verdict.
+
+For development and the database demo, this command imports public data but leaves verified_at empty. It does not verify handle ownership or create a signed-in application session. The initial proficiency value is accepted divided by attempts; the richer recency and difficulty model is a later recommendation milestone.

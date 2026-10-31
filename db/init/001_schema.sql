@@ -4,6 +4,7 @@ CREATE TABLE app_user (
     rating INTEGER CHECK (rating IS NULL OR rating >= 0),
     max_rating INTEGER CHECK (max_rating IS NULL OR max_rating >= 0),
     country TEXT,
+    rank_title TEXT,
     verified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
