@@ -46,7 +46,7 @@ def main():
         identity=(CONFIG['model'],CONFIG['revision'],CONFIG['recipe'])
         for offset, kind in [(1,'editorial'),(2,'statement')]:
             conn.execute('INSERT INTO retrieval_embedding(problem_id,source_kind,model,model_revision,recipe,content_hash,input_hash,embedding,chunk_count) '
-                         'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,1)',
+                         'VALUES(%s,%s,%s,%s,%s,%s,%s,%s::real[]::vector,1)',
                          (pid+offset,kind,*identity,content_hash,content_hash,vector))
         assert conn.execute('SELECT count(*) FROM retrieval_current_embedding WHERE problem_id IN(%s,%s)',(pid+1,pid+2)).fetchone()[0]==2
         conn.execute('UPDATE problem_editorial SET content_hash=%s WHERE problem_id=%s',(text_hash('changed'),pid+1))
@@ -56,8 +56,8 @@ def main():
             rejected=False
             try:
                 with conn.transaction():
-                    conn.execute('UPDATE retrieval_embedding SET embedding=%s WHERE problem_id=%s',(bad,pid+1))
-            except psycopg.errors.CheckViolation:
+                    conn.execute('UPDATE retrieval_embedding SET embedding=%s::real[]::vector WHERE problem_id=%s',(bad,pid+1))
+            except (psycopg.errors.CheckViolation, psycopg.DataError):
                 rejected=True
             assert rejected, 'Invalid vector passed the database constraint'
         print(f'Database checks passed: {len(users)*3} baseline comparisons; missing text, solved/rating exclusions, stale sources and invalid vectors.')

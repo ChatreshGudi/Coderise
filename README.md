@@ -10,11 +10,11 @@ Use PostgreSQL **18** for that snapshot. The older Windows database can stay int
 
 ## Earlier Fedora migration
 
-For the complete Fedora setup, database restore, and optional pgvector preparation, follow [docs/FEDORA.md](docs/FEDORA.md). The verified transfer snapshot is attached to [the migration release](https://github.com/ChatreshGudi/Coderise/releases/tag/fedora-transfer-2026-11-01). Read [docs/HANDOFF.md](docs/HANDOFF.md) to continue development in a new chat.
+For Fedora setup and database restore, follow [docs/FEDORA.md](docs/FEDORA.md), then [the pgvector setup](docs/PGVECTOR.md). The verified transfer snapshot is attached to [the migration release](https://github.com/ChatreshGudi/Coderise/releases/tag/fedora-transfer-2026-11-01). Read [docs/HANDOFF.md](docs/HANDOFF.md) to continue development in a new chat.
 
 ## Run the website
 
-Requirements: Node.js 22, PostgreSQL 17 with pgAdmin, and Python 3.10+.
+Requirements: Node.js 22, PostgreSQL with the matching pgvector extension package, pgAdmin, and Python 3.10+. The current transfer snapshot requires PostgreSQL 18.
 
 From the project folder in Command Prompt:
 
@@ -57,7 +57,7 @@ npm run db:web
 npm run dev
 ```
 
-The website does not require pgvector, embedding generation, or an LLM. Its current recommendations use the explicit SQL topic/difficulty/popularity baseline. See [web setup and implementation details](docs/WEB.md) and [verification results](docs/WEB_VERIFICATION.md).
+For vector-assisted recommendations, continue with [docs/PGVECTOR.md](docs/PGVECTOR.md): apply migrations 006 and 007, restore or generate the embedding cache, and set `CODERISE_SEMANTIC_RECOMMENDATIONS=1`. PostgreSQL stores native `vector(384)` embeddings and computes cosine similarity; no running model server is needed. Profiles without compatible references use the SQL baseline. See [web setup details](docs/WEB.md).
 
 ## Import statements
 

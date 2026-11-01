@@ -28,7 +28,9 @@ def main():
               GROUP BY p.problem_id ORDER BY practiced_at DESC,p.problem_id""",(uid,)).fetchall()
             want_solved=not(mode=='fix_weaknesses' and any(not r[6] for r in history)) and any(r[6] for r in history)
             eligible_history=[r for r in history if r[6]==want_solved]
-            anchors=eligible_history[:CONFIG['anchorLimit']]
+            selected_refs=conn.execute('SELECT problem_id,source_kind FROM retrieval_references(%s,%s,%s,%s,%s,%s)', (uid,mode,*identity,CONFIG['anchorLimit'])).fetchall()
+            selected_pairs=set(selected_refs)
+            anchors=[r for r in eligible_history if any(pid==r[0] for pid,_ in selected_refs)]
             history_vectors=set(conn.execute(
                 'SELECT problem_id,source_kind FROM retrieval_current_embedding '
                 'WHERE problem_id=ANY(%s) AND model=%s AND model_revision=%s AND recipe=%s',
@@ -48,9 +50,9 @@ def main():
             meta={r[0]:dict(problem_id=r[0],key=f'{r[1]}/{r[2]}',name=r[3],rating=r[4],date=str(r[5]),
                            statement=r[6],editorial=r[7],editorial_status=r[8],tags=r[9]) for r in records}
             vectors={(pid,kind):(content_hash,np.array(vector,dtype=float)) for pid,kind,content_hash,vector in conn.execute(
-                'SELECT problem_id,source_kind,content_hash,embedding FROM retrieval_current_embedding '
+                'SELECT problem_id,source_kind,content_hash,embedding::real[] FROM retrieval_current_embedding '
                 'WHERE problem_id=ANY(%s) AND model=%s AND model_revision=%s AND recipe=%s',(list(ids),*identity))}
-            anchor_counts={kind:sum((r[0],kind) in vectors for r in anchors) for kind in ['editorial','statement']}
+            anchor_counts={kind:sum((r[0],kind) in selected_pairs for r in anchors) for kind in ['editorial','statement']}
             details={}
             groups=collections.Counter()
             for candidate in candidates:
@@ -60,7 +62,7 @@ def main():
                     h,v=vectors[pid,kind]
                     matches=[]
                     for anchor in anchors:
-                        if (anchor[0],kind) not in vectors: continue
+                        if (anchor[0],kind) not in vectors or (anchor[0],kind) not in selected_pairs: continue
                         ah,av=vectors[anchor[0],kind]
                         if ah==h: continue
                         score=float(v@av/(np.linalg.norm(v)*np.linalg.norm(av)))

@@ -123,7 +123,7 @@ def main():
                 pid, kind, content_hash, text = row
                 conn.execute("""INSERT INTO retrieval_embedding
                     (problem_id,source_kind,model,model_revision,recipe,content_hash,input_hash,embedding,chunk_count)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s::real[]::vector,%s)
                     ON CONFLICT(problem_id,source_kind,model,model_revision,recipe) DO UPDATE SET
                     content_hash=EXCLUDED.content_hash,input_hash=EXCLUDED.input_hash,embedding=EXCLUDED.embedding,
                     chunk_count=EXCLUDED.chunk_count,created_at=now()""",

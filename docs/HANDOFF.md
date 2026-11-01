@@ -2,6 +2,23 @@
 
 Updated 1 November 2026. The user is returning to Windows; follow `docs/WINDOWS.md`.
 
+## Latest update: pgvector required for the course project
+
+This update supersedes the older array-storage/feature-off notes below. Native
+pgvector v0.8.7 is installed in the portable PostgreSQL 18 runtime. The active
+database is `coderise_windows` at `127.0.0.1:5433`; credentials remain in ignored
+`.env`. Migration 007 converts all 16,094 cached embeddings to `vector(384)`, adds
+HNSW cosine indexes and SQL similarity functions, and fixes compatible-reference
+selection before the per-channel 30-reference cutoff. Production ranking receives
+scalar similarities rather than vector arrays. Vector ranking is enabled locally;
+no new model generation was needed. Read [PGVECTOR.md](PGVECTOR.md) for setup,
+tests, fallback behavior and pgAdmin demo queries. Quality remains uncalibrated.
+
+The baseline and all original eligibility rules remain available. Chatresh has
+no compatible references; tourist and Petr use vector-assisted ranking. Do not
+resume Ollama generation. Pre-existing untracked 003/generate_embeddings drafts
+were not used. No commit/push is implied by this implementation.
+
 ## Project and user preferences
 
 - Repository: https://github.com/ChatreshGudi/Coderise (public), main branch.

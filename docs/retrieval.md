@@ -1,7 +1,8 @@
 # Coverage-aware editorial and statement retrieval
 
 This path embeds existing source text. It does not generate solutions or call
-Ollama. The production ranking stays opt-in until reviewed for relevance.
+Ollama. The course-project deployment now uses pgvector-assisted ranking, with a
+baseline fallback when compatible text/history is missing. See [PGVECTOR.md](PGVECTOR.md).
 
 ## Data and coverage
 
@@ -50,18 +51,22 @@ model ID/revision, recipe, vector, chunk count and creation time. Batches commit
 independently. Re-running only encodes missing or changed inputs. Model artifacts
 and text caches remain under ignored `reports/`; vectors stay in local PostgreSQL.
 
-The current implementation uses normalized native `real[384]` arrays, bounded
-candidate retrieval, and application-side cosine comparisons. It needs no server
-extension or archived vector migration. An ANN/pgvector index can be introduced
-later if measured scale/latency calls for it. Zero, non-finite and wrong-sized
-vectors are rejected by database constraints. `retrieval_current_embedding`
+Migration 007 converts the existing cache to native `vector(384)` without model
+inference. PostgreSQL computes cosine similarities with `<=>`; only scalar
+similarities reach the application. Partial HNSW cosine indexes support catalogue
+similarity searches. Recommendation scoring uses exact comparisons within a
+bounded shortlist. Zero, non-finite and wrong-sized vectors are rejected by
+database constraints. `retrieval_current_embedding`
 rejects stale source hashes and held-out editorials without deleting provenance.
 
 ## Ranking behavior
 
 1. The SQL baseline chooses up to 500 candidates using the same rating band,
    solved exclusions, difficulty fit, topic weakness, popularity and retry signals.
-2. Up to 30 recent problems form anchors. Warm-up/stretch prefer accepted history;
+2. Up to 30 recent compatible references form anchors **per source channel**.
+   Source freshness, model identity and duplicate hashes are checked before the
+   cutoff, so unavailable recent vectors do not hide usable older history.
+   Warm-up/stretch prefer accepted history;
    if none exists, they use unsuccessful judged attempts. Fix weaknesses prefers
    unsuccessful attempts, falling back to accepted history. Compilation failures
    and pending verdicts are excluded from semantic anchors.
@@ -78,15 +83,15 @@ rejects stale source hashes and held-out editorials without deleting provenance.
    bonus. The resulting score is bounded to [0,1], not a solve probability.
 
 Those weights are initial experiment settings, not fitted/calibrated
-weights or evidence of better learning outcomes. Review the comparison report
-and use an independent labelled relevance set before making this the default.
+weights or evidence of better learning outcomes. Use an independent labelled
+relevance set before claiming better recommendation quality.
 Ranking occurs within the 500-problem baseline shortlist, not the entire corpus.
 
 `recommend_practice` is preserved as the baseline. Migration 006 adds the wider
 `recommend_practice_candidates` function without changing the original function.
-The API reports `coverage_aware_hybrid` only when the returned results use a
+The API reports `pgvector_hybrid` only when the returned results use a
 compatible similarity channel, otherwise `topic_difficulty_baseline`. Vector
-arrays and editorial bodies are removed before API serialization.
+values and editorial bodies never enter the production ranking payload.
 
 ## Fedora setup and usage
 
@@ -95,6 +100,7 @@ Reuse the existing `.venv` and `.env` credentials:
 ```bash
 .venv/bin/python -m pip install -r requirements-retrieval.txt
 npm run db:retrieval
+npm run db:pgvector # install the matching pgvector server package first
 .venv/bin/python scripts/import_editorials.py           # audit only
 .venv/bin/python scripts/import_editorials.py --apply   # apply completed import
 .venv/bin/python scripts/build_retrieval_embeddings.py # all missing/stale sources
@@ -105,24 +111,24 @@ writer at a time. Changing statements or editorials automatically hides old
 vectors; rerun the encoder to refresh them. To refresh the source snapshot,
 explicitly pass a new immutable `--revision` after reviewing its changes.
 
-Enable experimental ranking when starting the app:
+Enable vector ranking when starting the app:
 
 ```bash
 CODERISE_SEMANTIC_RECOMMENDATIONS=1 npm run dev
 ```
 
 Or set that variable in ignored `.env` and restart the running server. `0` or an
-unset variable uses the baseline. Missing migration 006 also falls back to the
+unset variable uses the baseline. Missing retrieval functions also fall back to the
 baseline; unrelated database failures remain errors rather than being hidden.
 Profiles with no usable practice anchors also retain the baseline.
 
 ## Checks and review
 
-The [2026-11-01 relevance review](recommendation_quality_review.md) recommends
-keeping the feature off by default. It found that limiting history before checking
-vector availability misses hundreds of usable older references, and that several
-high-similarity pairs share broad vocabulary rather than core algorithms. Fix
-reference selection before tuning weights. Reproduce the local content audit with
+The [earlier relevance review](recommendation_quality_review.md) found that limiting
+history before vector availability missed usable references. Migration 007 fixes
+that bug; the update in that review records the new coverage. It also found
+vocabulary matches that did not share the core algorithm. That quality limitation
+remains; weights have not been tuned on those inspected examples. Reproduce the audit with
 `.venv/bin/python scripts/audit_recommendations.py` after generating the application
 comparison below. Its source text and diagnostics stay under ignored
 `reports/recommendation_quality/`.
@@ -131,6 +137,7 @@ comparison below. Its source text and diagnostics stay under ignored
 npm test
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 .venv/bin/python scripts/check_retrieval.py
+node scripts/check-pgvector.mjs
 node --conditions=react-server --import tsx scripts/check-recommendations.ts
 npm run typecheck
 npm run build

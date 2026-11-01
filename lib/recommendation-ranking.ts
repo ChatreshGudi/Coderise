@@ -42,18 +42,28 @@ function similarity(candidate: RetrievalVectors, anchors: RetrievalVectors[], ki
 
 export function rankWithCoverage(candidates: RankingCandidate[], anchors: RetrievalVectors[], limit: number): RankingDecision[] {
   if(!Number.isInteger(limit) || limit<1 || limit>20) throw new Error('Limit must be 1 to 20');
-  const decisions=candidates.map(row=>({
-    problem_id:row.problem_id, score:row.score, baseline_score:row.score, semantic_adjustment:0,
-    similarity_source:null as TextSource|null, semantic_similarity:null as number|null,
-  }));
-  const groups: Record<TextSource,{index:number;similarity:number}[]>={editorial:[],statement:[]};
-  candidates.forEach((row,index)=>{
+  const similarities=candidates.map(row=>{
     const editorial=similarity(row,anchors,'editorial');
-    if(editorial!==null) groups.editorial.push({index,similarity:editorial});
-    else {
-      const statement=similarity(row,anchors,'statement');
-      if(statement!==null) groups.statement.push({index,similarity:statement});
-    }
+    const statement=editorial===null?similarity(row,anchors,'statement'):null;
+    return {problem_id:row.problem_id,similarity_source:editorial!==null?'editorial' as const:statement!==null?'statement' as const:null,semantic_similarity:editorial??statement};
+  });
+  return rankWithSimilarities(candidates,similarities,limit);
+}
+
+export type DatabaseSimilarity = {
+  problem_id:number; similarity_source:TextSource|null; semantic_similarity:number|null;
+  editorial_references?:number; statement_references?:number; matched_references?:number;
+};
+
+// Production vectors never leave PostgreSQL: only these scalar distances enter ranking.
+export function rankWithSimilarities(candidates:{problem_id:number;score:number;solved_count:number}[],similarities:DatabaseSimilarity[],limit:number):RankingDecision[] {
+  if(!Number.isInteger(limit)||limit<1||limit>20) throw new Error('Limit must be 1 to 20');
+  const decisions=candidates.map(row=>({problem_id:row.problem_id,score:row.score,baseline_score:row.score,semantic_adjustment:0,similarity_source:null as TextSource|null,semantic_similarity:null as number|null}));
+  const bySimilarity=new Map(similarities.map(row=>[row.problem_id,row]));
+  const groups:Record<TextSource,{index:number;similarity:number}[]>={editorial:[],statement:[]};
+  candidates.forEach((row,index)=>{
+    const match=bySimilarity.get(row.problem_id);
+    if(match?.similarity_source && match.semantic_similarity!=null && Number.isFinite(match.semantic_similarity)) groups[match.similarity_source].push({index,similarity:match.semantic_similarity});
   });
   for(const kind of ['editorial','statement'] as const) {
     const group=groups[kind];

@@ -123,13 +123,21 @@ Open <http://127.0.0.1:3000>. In pgAdmin, connect to the PostgreSQL **18** serve
 `retrieval_embedding`, plus the `retrieval_coverage` view, contain the new work.
 Subsequent profile refreshes can legitimately change submission/table counts.
 
-## 5. Continue development
+## 5. Enable the vector database integration
+
+After restoring and verifying the transfer snapshot, follow
+[PGVECTOR.md](PGVECTOR.md): install the PostgreSQL 18 pgvector package, run
+`npm run db:pgvector`, set `CODERISE_SEMANTIC_RECOMMENDATIONS=1`, and restart the
+website. The local Windows setup has completed these steps. The transfer snapshot
+predates migration 007, so it still needs that conversion on another machine.
+
+## 6. Continue development
 
 Read [HANDOFF.md](HANDOFF.md), [retrieval.md](retrieval.md), and the
-[relevance review](recommendation_quality_review.md). The website stays on the
-established SQL baseline. Next work is selecting recent **compatible** references
-before the 30-reference cutoff, then reviewing relevance again. That fix is not
-implemented in this transfer. Do not resume the stopped Ollama experiment.
+[relevance review](recommendation_quality_review.md). Compatible-reference selection
+and pgvector integration are now implemented in migration 007. A labelled relevance
+evaluation is still useful before tuning the encoder or weights. Do not resume
+the stopped Ollama experiment.
 
 The cached vectors work directly from PostgreSQL; model weights are unnecessary
 for application ranking. Only if changing/rebuilding sources later, install:
@@ -146,5 +154,6 @@ Suggested continuation prompt:
 
 > Read docs/HANDOFF.md, docs/WINDOWS.md and docs/recommendation_quality_review.md.
 > We returned from Fedora with the Windows transfer release and a PostgreSQL 18
-> database. Verify my local setup when I ask, then fix compatible-reference
-> selection. Keep semantic ranking experimental and do not resume Ollama generation.
+> database. Read docs/PGVECTOR.md for the subsequent native-vector migration and
+> compatible-reference fix. Vector ranking is enabled locally with a baseline
+> fallback. Do not resume Ollama generation or claim validated recommendation quality.

@@ -1,5 +1,28 @@
 # Recommendation relevance review — 2026-11-01
 
+## Subsequent implementation update
+
+Migration 007 now uses native pgvector storage and SQL cosine scoring. Compatible
+reference selection is fixed before applying a 30-reference cap per channel.
+The repeated full-catalogue scan was replaced with indexed problem lookups;
+reference selection measured about 12 ms locally, previously about 11 seconds.
+All nine application/API regression cases and rollback-only vector fixtures pass.
+Independent NumPy recomputation agrees with SQL similarities within 0.00001.
+
+| Profile | Warm-up editorial / statement | Stretch | Fix weaknesses |
+| --- | --- | --- | --- |
+| Chatresh | 0 / 0 | 0 / 0 | 0 / 0 |
+| tourist | 30 / 30 | 30 / 30 | 15 / 19 |
+| Petr | 30 / 30 | 30 / 30 | 16 / 30 |
+
+The course deployment enables vector-assisted ranking, with the baseline fallback
+for missing evidence. Weights and the MiniLM encoder are unchanged. This fixes
+coverage and storage integration; it does not establish better learning outcomes
+or resolve the technique-versus-vocabulary limitation below. The rest of this
+document records the **earlier** review; its selected references and inspected
+suggestions describe the pre-fix implementation. Regenerated local reports now
+describe the corrected implementation.
+
 ## Decision
 
 Keep semantic ranking experimental and disabled by default. The cache and ranking

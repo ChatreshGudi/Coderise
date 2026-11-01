@@ -36,13 +36,13 @@ async function main() {
         const response=await GET(new Request(`http://localhost/api/recommendations?handle=${encodeURIComponent(handle)}&mode=${mode}`));
         assert.equal(response.status,200);
         const payload=await response.json();
-        assert.ok(['topic_difficulty_baseline','coverage_aware_hybrid'].includes(payload.strategy));
+        assert.ok(['topic_difficulty_baseline','pgvector_hybrid'].includes(payload.strategy));
         assert.equal(payload.mode,mode);
         assert.ok(payload.problems.every((p:{problem_id:number})=>!accepted.has(p.problem_id)));
         const compact=(p:(typeof hybrid.problems)[number])=>({key:`${p.contest_id}/${p.problem_index}`,name:p.name,rating:p.rating,score:p.score,
           baseline_score:p.baseline_score,similarity_source:p.similarity_source,semantic_similarity:p.semantic_similarity,
           semantic_adjustment:p.semantic_adjustment,reason:p.reason});
-        comparison.push({handle,mode,strategy:hybrid.strategy,milliseconds,baseline:baseline.problems.map(compact),hybrid:hybrid.problems.map(compact)});
+        comparison.push({handle,mode,strategy:hybrid.strategy,references:hybrid.references,milliseconds,baseline:baseline.problems.map(compact),hybrid:hybrid.problems.map(compact)});
       }
     }
     await mkdir('reports',{recursive:true});

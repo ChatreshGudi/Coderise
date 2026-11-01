@@ -8,6 +8,7 @@
     "start": "next start --hostname 127.0.0.1",
     "db:web": "node scripts/migrate-web.mjs",
     "db:retrieval": "node scripts/migrate-retrieval.mjs",
+    "db:pgvector": "node scripts/migrate-pgvector.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
