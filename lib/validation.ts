@@ -19,10 +19,23 @@ export function problemKey(input: string): { contest: number; index: string } | 
   const match = input.trim().match(/^(\d{1,7})\s*[/\-]?\s*([a-zA-Z]\d?|\d{2})$/);
   return match ? { contest: Number(match[1]), index: match[2].toUpperCase() } : null;
 }
-export function withParams(path: string, params: Record<string, string | number | undefined | null>): string {
+export function withParams(path: string, params: Record<string, string | string[] | number | undefined | null>): string {
   const q = new URLSearchParams();
-  for (const [key, item] of Object.entries(params)) if (item !== undefined && item !== null && item !== "") q.set(key, String(item));
+  for (const [key, item] of Object.entries(params)) {
+    for (const entry of Array.isArray(item) ? item : [item]) {
+      if (entry !== undefined && entry !== null && entry !== "") q.append(key, String(entry));
+    }
+  }
   return `${path}${q.size ? `?${q}` : ""}`;
 }
 export const number = (n: number | string | null | undefined) => n == null ? "—" : Number(n).toLocaleString("en-US");
 export const cfProblem = (contest: number, index: string) => `https://codeforces.com/problemset/problem/${contest}/${encodeURIComponent(index)}`;
+
+export function topicValues(params: Params): string[] {
+  const raw = params.tag;
+  return [...new Set((Array.isArray(raw) ? raw : [raw]).filter((v): v is string => typeof v === "string").map(v => v.trim()).filter(Boolean))].slice(0, 50);
+}
+export function pageNumbers(page: number, total: number): number[] {
+  const start = Math.max(1, Math.min(page - 2, total - 4));
+  return [...new Set([1, ...Array.from({ length: Math.min(5, total) }, (_, i) => start + i), total])].sort((a, b) => a - b);
+}

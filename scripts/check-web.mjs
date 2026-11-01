@@ -8,6 +8,13 @@ assert.ok(profile.profile.accepted_submissions<=profile.profile.submission_count
 const all=await get('/api/problems/search?handle='+handle);assert.equal(all.rows.length,25);
 const second=await get('/api/problems/search?handle='+handle+'&page=2');
 assert.ok(!all.rows.some(a=>second.rows.some(b=>a.problem_id===b.problem_id)));
+const multi=await get('/api/problems/search?tag=graphs&tag=dp&sort=popular');
+assert.ok(multi.count>25);assert.deepEqual(multi.filters.tag,['graphs','dp']);
+assert.ok(multi.rows.every(p=>p.tags.includes('graphs')&&p.tags.includes('dp')));
+const multiNext=await get('/api/problems/search?tag=graphs&tag=dp&sort=popular&page=2');
+assert.ok(!multi.rows.some(a=>multiNext.rows.some(b=>a.problem_id===b.problem_id)));
+const legacyTopic=await get('/api/problems/search?tag=constructive+algorithms');
+assert.ok(legacyTopic.rows.every(p=>p.tags.includes('constructive algorithms')));
 const exact=await get('/api/problems/search?q=1879C&handle='+handle);assert.equal(exact.count,1);assert.equal(exact.rows[0].contest_id,1879);
 const unsolved=await get('/api/problems/search?status=unsolved&handle='+handle);assert.ok(unsolved.rows.every(p=>p.verdict!=='OK'));
 const malicious=await get('/api/problems/search?q='+encodeURIComponent("' OR true;--"));assert.ok(malicious.count<all.total);

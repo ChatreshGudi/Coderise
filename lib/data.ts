@@ -1,6 +1,6 @@
 import "server-only";
 import { query } from "./db";
-import { integer, problemKey, value, type Mode, type Params } from "./validation";
+import { integer, problemKey, topicValues, value, type Mode, type Params } from "./validation";
 
 export type Profile = {
   user_id: number; cf_handle: string; rating: number | null; max_rating: number | null;
@@ -13,7 +13,7 @@ export type Problem = {
   problem_id: number; contest_id: number; problem_index: string; name: string; rating: number | null;
   solved_count: number; tags: string[]; verdict: string | null; attempts: number;
 };
-export type Pick = Problem & { score: number; reason: string; previous_attempts: number };
+export type Pick = Problem & { score: number; reason: string; previous_attempts: number; statement: string | null };
 export type Submission = { submission_id: number; contest_id: number; problem_index: string; name: string; rating: number | null; verdict: string; submitted_at: Date; language: string | null; time_ms: number | null };
 export type Topic = { name: string; attempts: number; accepted: number; wrong_attempts: number; proficiency: number; unique_solved: number };
 export type Job = { job_id: string; kind: string; handle: string | null; status: string; stage: string; created_at: Date; started_at: Date | null; finished_at: Date | null; counts: Record<string,number>; error_message: string | null };
@@ -26,9 +26,9 @@ export async function tags(): Promise<string[]> {
   return (await query<{ name: string }>("SELECT name FROM tag WHERE EXISTS(SELECT 1 FROM problem_tag pt WHERE pt.tag_id=tag.tag_id) ORDER BY name")).map(r=>r.name);
 }
 export async function recommendations(profile: Profile, mode: Mode, limit = 5): Promise<Pick[]> {
-  return query<Pick>(`SELECT r.*, COALESCE((SELECT array_agg(t.name ORDER BY t.name) FROM problem_tag pt JOIN tag t USING(tag_id) WHERE pt.problem_id=r.problem_id),'{}') AS tags,
+  return query<Pick>(`SELECT r.*, ps.description AS statement, COALESCE((SELECT array_agg(t.name ORDER BY t.name) FROM problem_tag pt JOIN tag t USING(tag_id) WHERE pt.problem_id=r.problem_id),'{}') AS tags,
     CASE WHEN r.previous_attempts>0 THEN 'ATTEMPTED' ELSE NULL END AS verdict, r.previous_attempts AS attempts
-    FROM recommend_practice($1,$2,$3) r`, [profile.user_id,mode,limit]);
+    FROM recommend_practice($1,$2,$3) r LEFT JOIN problem_statement ps ON ps.problem_id=r.problem_id`, [profile.user_id,mode,limit]);
 }
 export async function dashboard(profile: Profile) {
   const [topics, recent, weeks, ratings, verdicts, days] = await Promise.all([
@@ -61,7 +61,7 @@ const problemColumns = `p.*,COALESCE((SELECT array_agg(t.name ORDER BY t.name) F
     ELSE (SELECT s.verdict FROM submission s WHERE s.problem_id=p.problem_id AND s.user_id=$1 ORDER BY submitted_at DESC LIMIT 1) END AS verdict,
   (SELECT count(*) FROM submission s WHERE s.problem_id=p.problem_id AND s.user_id=$1) AS attempts`;
 export async function searchProblems(params: Params, userId: number | null) {
-  const q=value(params,"q").trim().slice(0,200), tag=value(params,"tag"), status=value(params,"status");
+  const q=value(params,"q").trim().slice(0,200), tag=topicValues(params), status=value(params,"status");
   const min=integer(value(params,"min"),800,800,3500), max=integer(value(params,"max"),3500,800,3500);
   const page=integer(value(params,"page"),1,1,10000), sort=value(params,"sort","recent");
   const args: unknown[]=[userId]; const conditions:string[]=[];
@@ -72,7 +72,7 @@ export async function searchProblems(params: Params, userId: number | null) {
     else { const ref=bind(q); conditions.push(`(to_tsvector('simple',p.name) @@ websearch_to_tsquery('simple',${ref}) OR p.name ILIKE '%'||${ref}||'%' OR EXISTS(SELECT 1 FROM problem_tag pt JOIN tag t USING(tag_id) WHERE pt.problem_id=p.problem_id AND t.name ILIKE '%'||${ref}||'%'))`); }
   }
   if(value(params,'min')||value(params,'max')) conditions.push(`p.rating BETWEEN ${bind(min)} AND ${bind(max)}`);
-  if(tag) conditions.push(`EXISTS(SELECT 1 FROM problem_tag pt JOIN tag t USING(tag_id) WHERE pt.problem_id=p.problem_id AND t.name=${bind(tag)})`);
+  for (const topic of tag) conditions.push(`EXISTS(SELECT 1 FROM problem_tag pt JOIN tag t USING(tag_id) WHERE pt.problem_id=p.problem_id AND t.name=${bind(topic)})`);
   if(status==='unsolved'&&userId) conditions.push("NOT EXISTS(SELECT 1 FROM submission s WHERE s.problem_id=p.problem_id AND s.user_id=$1 AND s.verdict='OK')");
   const where=conditions.length?'WHERE '+conditions.join(' AND '):'';
   const order=({rating_asc:'p.rating ASC NULLS LAST,p.contest_id DESC',rating_desc:'p.rating DESC NULLS LAST,p.contest_id DESC',popular:'p.solved_count DESC,p.contest_id DESC'} as Record<string,string>)[sort]??'p.contest_id DESC,p.problem_index';
