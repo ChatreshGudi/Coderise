@@ -168,6 +168,7 @@ def import_user(
     rating_changes: list[dict[str, Any]],
     submissions: list[dict[str, Any]],
 ) -> tuple[int, int, int]:
+    handle = profile.get("handle") or handle
     processed_ratings = 0
     processed_submissions = 0
     skipped_submissions = 0
@@ -310,7 +311,7 @@ def main() -> int:
         f"{result[1]} submission records processed, "
         f"{result[2]} submissions skipped (problem missing contest ID or index)."
     )
-    print("The handle is stored as unverified; this importer does not prove ownership.")
+    print("Public profile imported. No Codeforces credentials are requested.")
     return 0
 
 

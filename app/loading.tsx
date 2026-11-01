@@ -1,0 +1,1 @@
+export default function Loading(){return <main id="main" className="page loading-page" aria-busy="true"><span className="eyebrow muted">CODERISE / LOADING</span><div className="skeleton title-skeleton"/><div className="skeleton subtitle-skeleton"/><div className="skeleton content-skeleton"/><span className="sr-only">Loading your workspace…</span></main>;}

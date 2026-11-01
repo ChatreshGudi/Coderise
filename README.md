@@ -1,89 +1,92 @@
 # Coderise
 
-A Codeforces companion that tracks topic-level practice and recommends what to solve next. It uses the public Codeforces API; it does not submit code or scrape problem statements.
+A Codeforces practice companion built with Next.js and local PostgreSQL. Enter a public handle, inspect imported progress, browse problems, and choose practice suggestions. No registration or ownership verification is required.
 
-## Recommended setup: local PostgreSQL 17
+## Run the website
 
-This is the simplest setup for development and database demos. It uses the PostgreSQL 17 server installed on your computer, which you can inspect with pgAdmin.
+Requirements: Node.js 22, PostgreSQL 17 with pgAdmin, and Python 3.10+.
 
-### Prerequisites
+From the project folder in Command Prompt:
 
-- Windows with PostgreSQL 17 and pgAdmin
-- Python 3.10 or newer
-- Internet access for the Codeforces API
+```text
+copy .env.example .env
+notepad .env
+py -m venv .venv
+.venv\Scripts\activate
+py -m pip install -r requirements-web-worker.txt
+npm install
+```
 
-### 1. Create the database
+If `.env` or `.venv` already exists, reuse it. Set PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD to the local PostgreSQL connection. Keep credentials out of Git.
 
-1. Open pgAdmin and connect to your local PostgreSQL 17 server.
-2. Right-click Databases, choose Create > Database, and name it coderise.
-3. Select coderise and open Tools > Query Tool.
-4. Open db/init/001_schema.sql and execute it with F5.
-5. Open db/migrations/002_submission_tag_stats.sql and execute it with F5.
-6. Refresh Schemas > public > Tables.
+### Fresh database
 
-If Docker is already using port 5432, stop its database first from the project folder:
+Create a database named `coderise` in pgAdmin. In its Query Tool, execute:
 
-    docker compose stop postgres
+1. `db/init/001_schema.sql`
+2. `db/migrations/002_submission_tag_stats.sql`
+3. `db/migrations/004_problem_statements.sql`
 
-This preserves the Docker database volume.
+Import the catalogue, then add the web views, functions, and job table:
 
-### 2. Configure the database connection
+```text
+py scripts\import_codeforces_catalog.py
+npm run db:web
+npm run dev
+```
 
-Copy the example environment file, then edit it with the credentials for your local PostgreSQL server:
+Open http://127.0.0.1:3000 and enter a Codeforces handle. The website imports recent public submissions and rating history. PostgreSQL must stay running.
 
-    copy .env.example .env
-    notepad .env
+### Existing database
 
-Set PGUSER and PGPASSWORD to your local PostgreSQL login. Keep PGHOST=localhost, PGPORT=5432, and PGDATABASE=coderise. If .env already exists, add or update those PG settings instead of overwriting it.
+With the catalogue, migrations 002 and 004, and `.env` already configured:
 
-The .env file is ignored by Git. Never commit it or share its password.
+```text
+npm install
+npm run db:web
+npm run dev
+```
 
-### 3. Install the importer
+The website does not require pgvector, embedding generation, or an LLM. Its current recommendations use the explicit SQL topic/difficulty/popularity baseline. See [web setup and implementation details](docs/WEB.md) and [verification results](docs/WEB_VERIFICATION.md).
 
-Run these commands from the Coderise folder in Command Prompt:
+## Import statements
 
-    py -m venv .venv
-    .venv\Scripts\activate
-    py -m pip install -r requirements.txt
+```text
+py -m pip install -r requirements-statements.txt
+py scripts\import_problem_statements.py
+```
 
-### 4. Import Codeforces data
+The importer matches a pinned Open R1 Codeforces dataset snapshot to the catalogue. It stores descriptions, input/output formats, notes, examples, attribution, source IDs, and content hashes. It does not import editorials, solutions, or test cases. Read [statement import documentation](docs/statement_import.md) for source information and coverage reporting.
 
-Import the public contest and problem catalogue:
+Statements are optional for browsing: missing statements link to the original Codeforces page. Dataset content and database rows are not included in Git. Generated coverage reports are local and ignored.
 
-    py scripts\import_codeforces_catalog.py
+## Features
 
-Optionally import a public user profile, rating history, and up to 2,000 recent submissions:
+- Public-handle import, switching, manual refresh, and active-page refresh.
+- Dashboard with imported solves, rating history, weekly activity, topic statistics, verdicts, and recent submissions.
+- Three practice modes: Warm up, Stretch, and Fix weaknesses.
+- Problem search, rating/topic filters, imported-unsolved filtering, sorting, and pagination.
+- Statement pages with mathematical notation, examples, attempts, and related-topic problems.
+- Separate developer sync console, disabled until CODERISE_ADMIN_TOKEN is configured in the server environment.
 
-    py scripts\import_codeforces_user.py YOUR_CODEFORCES_HANDLE
+No bookmarks, learner accounts, private notes, practice queues, editor, or judge are implemented. Users submit on Codeforces. Personal statistics and solved exclusions reflect imported history, currently up to 2,000 recent submissions per handle.
 
-The user importer stores the handle as unverified. It does not prove ownership or create a login session. It can be rerun safely; submission IDs prevent the same judged submission from being counted twice.
+## Checks
 
-Both importers use the public Codeforces API and wait between API calls. They store catalogue metadata, not problem statements. See the [Codeforces API documentation](https://codeforces.com/apiHelp/methods).
+```text
+npm test
+npm run typecheck
+npm run build
+```
 
-### 5. Inspect the database
+With the app running, `node scripts/check-web.mjs` checks the live API and pages using the imported Chatresh profile. Set CODERISE_TEST_HANDLE to another imported handle if needed. `node scripts/check-import.mjs PUBLIC_HANDLE` exercises import and writes public profile data to the local database.
 
-Open sql/demo_queries.sql in pgAdmin's Query Tool. Replace YOUR_CODEFORCES_HANDLE with the imported handle in the user-specific queries.
+## Embedding research
 
-The base schema supports stock PostgreSQL 17. Unrated problems keep a NULL rating. The embedding column is JSONB for now; pgvector search has not been added to this local setup yet.
+[The evaluation report](docs/embedding_evaluation.md) compares MiniLM, MPNet, and a weighted-tag baseline on imported statements. This research is separate from the website's current ranking. To reproduce it, install `requirements.txt` and `requirements-statements.txt`, import the statements, then run `py scripts\evaluate_embeddings.py`. Model weights download on first use. Experiment data and vectors stay under ignored `reports/`.
 
-## Optional Docker database
+## Data sources and Git
 
-Docker provides a separate PostgreSQL 16 database with persistent storage. It is useful when you want to recreate the database environment without installing PostgreSQL locally.
+Use the public [Codeforces API](https://codeforces.com/apiHelp/methods) for profiles and catalogue updates. Statement source: [Open R1 Codeforces dataset](https://huggingface.co/datasets/open-r1/codeforces); retain its attribution and review its dataset card when redistributing content.
 
-1. Start Docker Desktop.
-2. Copy .env.example to .env if you have not already, and set POSTGRES_DB, POSTGRES_USER, and POSTGRES_PASSWORD for Docker.
-3. Run:
-
-       docker compose up -d
-       docker compose ps
-
-4. In pgAdmin, register a server with host localhost, port POSTGRES_PORT (5432 by default), database POSTGRES_DB, username POSTGRES_USER, and password POSTGRES_PASSWORD.
-5. The first start initializes the schema from db/init/001_schema.sql. Run db/migrations/002_submission_tag_stats.sql manually in pgAdmin.
-
-If local PostgreSQL already uses port 5432, set POSTGRES_PORT=5433 in .env and connect to Docker on port 5433. To run an importer against Docker, also set PGPORT to that host port, PGUSER to POSTGRES_USER, and PGPASSWORD to POSTGRES_PASSWORD.
-
-Docker stores its data in the postgres_data volume. docker compose down stops the service but preserves the data; docker compose down -v deletes the volume and its data. The Docker image includes pgvector, but the current schema does not use its vector type or search features.
-
-## Git and local data
-
-Commit the source files, schema, migrations, and documentation. Do not commit .env, .venv, or PostgreSQL data. A database import changes the local database; it does not add the imported rows to Git.
+Commit source, migrations, lockfiles, and documentation. Do not commit environment credentials, `.venv`, `node_modules`, build output, model files, or database data.
