@@ -1,0 +1,185 @@
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+import psycopg
+from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
+
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+DIMENSIONS = 384
+BATCH_SIZE = 64
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def connect_db() -> psycopg.Connection:
+    load_dotenv(ROOT / ".env")
+    password = os.getenv("PGPASSWORD")
+    if not password:
+        raise RuntimeError("PGPASSWORD is missing. Set your local PostgreSQL credentials in .env.")
+    return psycopg.connect(
+        host=os.getenv("PGHOST", "localhost"),
+        port=int(os.getenv("PGPORT", "5432")),
+        dbname=os.getenv("PGDATABASE", "coderise"),
+        user=os.getenv("PGUSER", "postgres"),
+        password=password,
+        connect_timeout=10,
+    )
+
+
+def problem_text(name: str, tags: str) -> str:
+    topic_text = tags if tags else "general programming"
+    return f"Codeforces programming problem: {name}. Topic tags: {topic_text}."
+
+
+def vector_literal(values: np.ndarray) -> str:
+    if values.shape != (DIMENSIONS,):
+        raise ValueError(f"Expected an embedding with {DIMENSIONS} dimensions; got {values.shape}.")
+    return "[" + ",".join(f"{float(value):.8f}" for value in values) + "]"
+
+
+def parse_vector(value: str) -> np.ndarray:
+    vector = np.fromstring(value.strip()[1:-1], sep=",", dtype=np.float32)
+    if vector.shape != (DIMENSIONS,):
+        raise ValueError(f"Stored vector has {vector.size} dimensions; expected {DIMENSIONS}.")
+    return vector
+
+
+def embed_missing_problems(connection: psycopg.Connection, model: SentenceTransformer, rebuild: bool) -> int:
+    with connection.cursor() as cursor:
+        if rebuild:
+            cursor.execute("DELETE FROM user_embedding")
+            cursor.execute("DELETE FROM problem_embedding")
+        cursor.execute(
+            """
+            SELECT p.problem_id, p.name,
+                   COALESCE(string_agg(t.name, ', ' ORDER BY t.name), '') AS tags
+            FROM problem p
+            LEFT JOIN problem_tag pt USING (problem_id)
+            LEFT JOIN tag t USING (tag_id)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM problem_embedding pe WHERE pe.problem_id = p.problem_id
+            )
+            GROUP BY p.problem_id, p.name
+            ORDER BY p.problem_id
+            """
+        )
+        problems = cursor.fetchall()
+
+    processed = 0
+    for offset in range(0, len(problems), BATCH_SIZE):
+        batch = problems[offset : offset + BATCH_SIZE]
+        texts = [problem_text(name, tags) for _, name, tags in batch]
+        vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        rows = [
+            (problem_id, vector_literal(np.asarray(vector, dtype=np.float32)), MODEL_NAME)
+            for (problem_id, _, _), vector in zip(batch, vectors, strict=True)
+        ]
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                """
+                INSERT INTO problem_embedding (problem_id, embedding, embedding_model)
+                VALUES (%s, %s::vector, %s)
+                ON CONFLICT (problem_id) DO UPDATE
+                SET embedding = EXCLUDED.embedding,
+                    embedding_model = EXCLUDED.embedding_model
+                """,
+                rows,
+            )
+        processed += len(rows)
+        print(f"Embedded {processed:,}/{len(problems):,} missing problems...", flush=True)
+    return processed
+
+
+def refresh_user_embeddings(connection: psycopg.Connection) -> int:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT user_id FROM app_user ORDER BY user_id")
+        user_ids = [row[0] for row in cursor.fetchall()]
+
+    refreshed = 0
+    for user_id in user_ids:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT DISTINCT pe.embedding::text
+                FROM submission s
+                JOIN problem_embedding pe USING (problem_id)
+                WHERE s.user_id = %s AND s.verdict = 'OK'
+                  AND pe.embedding_model = %s
+                """,
+                (user_id, MODEL_NAME),
+            )
+            vectors = [parse_vector(row[0]) for row in cursor.fetchall()]
+
+        if not vectors:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM user_embedding WHERE user_id = %s", (user_id,))
+            continue
+
+        profile = np.mean(np.stack(vectors), axis=0)
+        norm = float(np.linalg.norm(profile))
+        if norm == 0:
+            continue
+        profile = profile / norm
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO user_embedding (user_id, embedding, embedding_model, updated_at)
+                VALUES (%s, %s::vector, %s, now())
+                ON CONFLICT (user_id) DO UPDATE
+                SET embedding = EXCLUDED.embedding,
+                    embedding_model = EXCLUDED.embedding_model,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (user_id, vector_literal(profile), MODEL_NAME),
+            )
+        refreshed += 1
+    return refreshed
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate pgvector embeddings for Codeforces problems and user solve history."
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Regenerate every problem vector after titles or tags have changed.",
+    )
+    args = parser.parse_args()
+
+    try:
+        with connect_db() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+                if not cursor.fetchone()[0]:
+                    raise RuntimeError(
+                        "pgvector is not enabled in this database. Install pgvector for PostgreSQL 17, "
+                        "then run db/migrations/003_recommendation_functions.sql in pgAdmin."
+                    )
+                cursor.execute("SELECT count(*) FROM problem WHERE NOT EXISTS "
+                               "(SELECT 1 FROM problem_embedding pe WHERE pe.problem_id = problem.problem_id)")
+                missing = cursor.fetchone()[0]
+
+            if args.rebuild or missing:
+                print(f"Loading embedding model {MODEL_NAME} (first run downloads it)...", flush=True)
+                model = SentenceTransformer(MODEL_NAME, device="cpu")
+                embedded = embed_missing_problems(connection, model, args.rebuild)
+            else:
+                embedded = 0
+            profiles = refresh_user_embeddings(connection)
+
+        print(f"Embedding sync complete: {embedded:,} problems embedded; {profiles:,} user profiles refreshed.")
+        print("Recommendation vectors use problem names and Codeforces tags; problem statements are not stored.")
+        return 0
+    except (OSError, psycopg.Error, RuntimeError, ValueError) as exc:
+        print(f"Embedding sync failed: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

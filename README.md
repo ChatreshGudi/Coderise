@@ -2,6 +2,10 @@
 
 A Codeforces practice companion built with Next.js and local PostgreSQL. Enter a public handle, inspect imported progress, browse problems, and choose practice suggestions. No registration or ownership verification is required.
 
+## Fedora migration
+
+For the complete Fedora setup, database restore, and optional pgvector preparation, follow [docs/FEDORA.md](docs/FEDORA.md). The verified transfer snapshot is attached to [the migration release](https://github.com/ChatreshGudi/Coderise/releases/tag/fedora-transfer-2026-11-01). Read [docs/HANDOFF.md](docs/HANDOFF.md) to continue development in a new chat.
+
 ## Run the website
 
 Requirements: Node.js 22, PostgreSQL 17 with pgAdmin, and Python 3.10+.
@@ -58,7 +62,7 @@ py scripts\import_problem_statements.py
 
 The importer matches a pinned Open R1 Codeforces dataset snapshot to the catalogue. It stores descriptions, input/output formats, notes, examples, attribution, source IDs, and content hashes. It does not import editorials, solutions, or test cases. Read [statement import documentation](docs/statement_import.md) for source information and coverage reporting.
 
-Statements are optional for browsing: missing statements link to the original Codeforces page. Dataset content and database rows are not included in Git. Generated coverage reports are local and ignored.
+Statements are optional for browsing: missing statements link to the original Codeforces page. Dataset content and database rows are not included in Git history; the explicitly published transfer snapshot is a separate release attachment. Generated coverage reports are local and ignored.
 
 ## Features
 

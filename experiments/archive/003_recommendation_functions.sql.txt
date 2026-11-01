@@ -1,0 +1,171 @@
+-- Coderise vector search and personalized recommendation functions.
+-- Requires pgvector installed in PostgreSQL and applied after migrations 001 and 002.
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+ALTER TABLE problem_embedding
+    ALTER COLUMN embedding TYPE vector(384)
+    USING embedding::text::vector(384);
+
+ALTER TABLE problem_embedding
+    ADD COLUMN IF NOT EXISTS embedding_model TEXT NOT NULL
+    DEFAULT 'sentence-transformers/all-MiniLM-L6-v2';
+
+CREATE TABLE IF NOT EXISTS user_embedding (
+    user_id BIGINT PRIMARY KEY REFERENCES app_user(user_id) ON DELETE CASCADE,
+    embedding vector(384) NOT NULL,
+    embedding_model TEXT NOT NULL DEFAULT 'sentence-transformers/all-MiniLM-L6-v2',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS problem_embedding_cosine_idx
+    ON problem_embedding USING hnsw (embedding vector_cosine_ops);
+
+CREATE OR REPLACE FUNCTION solve_probability(
+    p_user_rating double precision,
+    p_problem_rating double precision,
+    p_tag_proficiency double precision DEFAULT 0.5
+)
+RETURNS double precision
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT 1.0 / (1.0 + power(10.0,
+        (p_problem_rating - (p_user_rating + (p_tag_proficiency - 0.5) * 200.0)) / 400.0
+    ));
+$$;
+
+CREATE OR REPLACE FUNCTION recommend_problems(
+    p_user_id bigint,
+    p_mode text DEFAULT 'stretch',
+    p_limit integer DEFAULT 10
+)
+RETURNS TABLE (
+    problem_id bigint,
+    contest_id integer,
+    problem_index text,
+    problem_name text,
+    rating integer,
+    score double precision,
+    estimated_solve_probability double precision,
+    reasons jsonb
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+    IF p_mode IS NULL OR p_mode NOT IN ('warm_up', 'stretch', 'fix_weaknesses') THEN
+        RAISE EXCEPTION 'Unsupported recommendation mode: %', p_mode;
+    END IF;
+    IF p_limit IS NULL OR p_limit < 1 OR p_limit > 50 THEN
+        RAISE EXCEPTION 'Recommendation limit must be between 1 and 50';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM app_user u WHERE u.user_id = p_user_id) THEN
+        RAISE EXCEPTION 'Unknown user id: %', p_user_id;
+    END IF;
+
+    RETURN QUERY
+    WITH user_profile AS (
+        SELECT u.user_id,
+               COALESCE(u.rating,
+                   (SELECT max(p.rating) FROM submission s JOIN problem p USING (problem_id)
+                    WHERE s.user_id = u.user_id AND s.verdict = 'OK' AND p.rating IS NOT NULL) + 200,
+                   1000)::double precision AS user_rating,
+               (SELECT count(*) FROM submission s
+                WHERE s.user_id = u.user_id AND s.verdict NOT IN ('TESTING', 'SUBMITTED'))::integer AS judged_count
+        FROM app_user u WHERE u.user_id = p_user_id
+    ),
+    tag_stats AS (
+        SELECT uts.tag_id,
+               uts.proficiency::double precision AS proficiency,
+               CASE WHEN uts.attempts > 0
+                    THEN uts.wrong_attempts::double precision / uts.attempts
+                    ELSE 0.0 END AS wrong_rate
+        FROM user_tag_stat uts WHERE uts.user_id = p_user_id
+    ),
+    candidate_tags AS (
+        SELECT pt.problem_id,
+               COALESCE(avg(ts.proficiency), 0.5)::double precision AS avg_proficiency,
+               COALESCE(avg(ts.wrong_rate), 0.0)::double precision AS avg_wrong_rate,
+               COALESCE(bool_or(ts.tag_id IS NOT NULL), false) AS has_history,
+               COALESCE(avg(1.0 - ts.proficiency), 0.0)::double precision AS weakness
+        FROM problem_tag pt
+        LEFT JOIN tag_stats ts USING (tag_id)
+        GROUP BY pt.problem_id
+    ),
+    candidates AS (
+        SELECT p.problem_id, p.contest_id, p.problem_index, p.name, p.rating,
+               up.user_rating, up.judged_count,
+               COALESCE(ct.avg_proficiency, 0.5) AS avg_proficiency,
+               COALESCE(ct.avg_wrong_rate, 0.0) AS avg_wrong_rate,
+               COALESCE(ct.has_history, false) AS has_history,
+               CASE WHEN up.judged_count >= 20 AND p_mode = 'fix_weaknesses'
+                    THEN 0.6 * COALESCE(ct.weakness, 0.0) + 0.4 * COALESCE(ct.avg_wrong_rate, 0.0)
+                    WHEN up.judged_count >= 20 THEN COALESCE(ct.weakness, 0.0)
+                    ELSE 0.0 END AS weakness_signal,
+               COALESCE(p.solved_count, 0)::double precision AS solved_count,
+               CASE WHEN ue.embedding IS NULL OR pe.embedding IS NULL THEN 0.5::double precision
+                    ELSE greatest(0.0::double precision,
+                         least(1.0::double precision, 1.0 - (pe.embedding <=> ue.embedding)))
+               END AS semantic_similarity,
+               (ue.embedding IS NOT NULL) AS has_user_embedding,
+               CASE WHEN up.judged_count >= 20 AND COALESCE(ct.has_history, false)
+                    THEN COALESCE(ct.avg_proficiency, 0.5) ELSE 0.5 END AS probability_tag_proficiency
+        FROM problem p
+        CROSS JOIN user_profile up
+        LEFT JOIN candidate_tags ct USING (problem_id)
+        LEFT JOIN problem_embedding pe USING (problem_id)
+        LEFT JOIN user_embedding ue
+          ON ue.user_id = up.user_id
+         AND ue.embedding_model = pe.embedding_model
+        WHERE p.rating IS NOT NULL
+          AND pe.embedding IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM submission s
+              WHERE s.user_id = p_user_id AND s.problem_id = p.problem_id AND s.verdict = 'OK'
+          )
+    ),
+    probabilities AS (
+        SELECT c.*,
+               solve_probability(c.user_rating, c.rating, c.probability_tag_proficiency) AS solve_prob,
+               CASE p_mode WHEN 'warm_up' THEN 0.80 WHEN 'fix_weaknesses' THEN 0.65 ELSE 0.50 END AS target_prob
+        FROM candidates c
+    ),
+    scored AS (
+        SELECT x.*,
+               greatest(0.0, 1.0 - abs(x.solve_prob - x.target_prob) / x.target_prob) AS difficulty_fit,
+               ln(1.0 + x.solved_count) AS popularity_raw
+        FROM probabilities x
+    ),
+    normalized AS (
+        SELECT s.*,
+               CASE WHEN max(s.popularity_raw) OVER () > 0
+                    THEN s.popularity_raw / max(s.popularity_raw) OVER () ELSE 0.0 END AS popularity
+        FROM scored s
+    ),
+    ranked AS (
+        SELECT n.*,
+               CASE WHEN p_mode = 'fix_weaknesses'
+                    THEN 0.55 * n.semantic_similarity + 0.20 * n.difficulty_fit
+                         + 0.10 * n.popularity + 0.15 * n.weakness_signal
+                    ELSE 0.65 * n.semantic_similarity + 0.25 * n.difficulty_fit
+                         + 0.10 * n.popularity
+               END AS total_score
+        FROM normalized n
+    )
+    SELECT r.problem_id, r.contest_id, r.problem_index, r.name, r.rating,
+           r.total_score, r.solve_prob,
+           jsonb_build_array(
+               CASE WHEN r.has_user_embedding
+                    THEN format('Vector similarity to your solved problems: %s%%', round((100 * r.semantic_similarity)::numeric))
+                    ELSE 'No solved-problem vector yet; using difficulty and popularity' END,
+               CASE WHEN p_mode = 'fix_weaknesses' AND r.weakness_signal > 0.25
+                    THEN 'Targets tags where you have room to improve'
+                    WHEN r.solve_prob >= r.target_prob THEN 'Estimated as a comfortable solve'
+                    ELSE 'Estimated as a useful challenge' END
+           )
+    FROM ranked r
+    ORDER BY r.total_score DESC, r.rating, r.contest_id, r.problem_index
+    LIMIT p_limit;
+END;
+$$;
