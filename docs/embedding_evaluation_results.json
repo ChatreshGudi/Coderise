@@ -1,0 +1,101 @@
+{
+  "corpus_size": 800,
+  "query_count": 120,
+  "validation_queries": 60,
+  "test_queries": 60,
+  "protocol": "Tag-overlap proxy, not human relevance or learning outcomes. No tags in model input. Rating band +/-400; same contest/title/source and identical statement text excluded.",
+  "packages": {
+    "torch": "2.15.0",
+    "sentence-transformers": "5.7.0",
+    "transformers": "5.22.1",
+    "numpy": "2.5.4"
+  },
+  "model_metadata": {
+    "sentence-transformers/all-MiniLM-L6-v2": {
+      "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "dimensions": 384,
+      "chunks": 2309,
+      "load_seconds": 53.78,
+      "encode_seconds": 45.41
+    },
+    "sentence-transformers/all-mpnet-base-v2": {
+      "revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+      "dimensions": 768,
+      "chunks": 2309,
+      "load_seconds": 126.98,
+      "encode_seconds": 550.56
+    }
+  },
+  "results": {
+    "random": {
+      "queries": 60,
+      "ndcg_at_10": 0.1155,
+      "specific_tag_precision_at_5": 0.2767,
+      "weighted_tag_jaccard_at_5": 0.0785
+    },
+    "tag_only": {
+      "queries": 60,
+      "ndcg_at_10": 0.8966,
+      "specific_tag_precision_at_5": 0.9567,
+      "weighted_tag_jaccard_at_5": 0.7089
+    },
+    "sentence-transformers/all-MiniLM-L6-v2": {
+      "queries": 60,
+      "ndcg_at_10": 0.2251,
+      "specific_tag_precision_at_5": 0.4267,
+      "weighted_tag_jaccard_at_5": 0.1571
+    },
+    "sentence-transformers/all-MiniLM-L6-v2+tags": {
+      "queries": 60,
+      "ndcg_at_10": 0.8893,
+      "specific_tag_precision_at_5": 0.95,
+      "weighted_tag_jaccard_at_5": 0.6986,
+      "semantic_weight": 0.1,
+      "validation_weight_scores": {
+        "0.0": 0.8966892173388951,
+        "0.1": 0.8979924802344764,
+        "0.2": 0.8959697246749965,
+        "0.3": 0.8892373043132807,
+        "0.4": 0.8846153311737832,
+        "0.5": 0.8507582120362714
+      }
+    },
+    "sentence-transformers/all-mpnet-base-v2": {
+      "queries": 60,
+      "ndcg_at_10": 0.2434,
+      "specific_tag_precision_at_5": 0.4667,
+      "weighted_tag_jaccard_at_5": 0.1901
+    },
+    "sentence-transformers/all-mpnet-base-v2+tags": {
+      "queries": 60,
+      "ndcg_at_10": 0.8966,
+      "specific_tag_precision_at_5": 0.9567,
+      "weighted_tag_jaccard_at_5": 0.7089,
+      "semantic_weight": 0.0,
+      "validation_weight_scores": {
+        "0.0": 0.8966892173388951,
+        "0.1": 0.8960500618621565,
+        "0.2": 0.8952072084289745,
+        "0.3": 0.8897674029003662,
+        "0.4": 0.8843301007023683,
+        "0.5": 0.8628012904287109
+      }
+    }
+  },
+  "mpnet_minus_minilm_uncertainty": {
+    "ndcg_at_10": {
+      "mean_difference": 0.01828924312295775,
+      "paired_bootstrap_95_percent_interval": [
+        -0.006813470221335426,
+        0.04508730160498292
+      ]
+    },
+    "specific_tag_precision_at_5": {
+      "mean_difference": 0.039999999999999994,
+      "paired_bootstrap_95_percent_interval": [
+        -0.006666666666666673,
+        0.08666666666666668
+      ]
+    }
+  }
+}
