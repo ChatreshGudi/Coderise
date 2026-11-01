@@ -2,7 +2,13 @@
 
 A Codeforces practice companion built with Next.js and local PostgreSQL. Enter a public handle, inspect imported progress, browse problems, and choose practice suggestions. No registration or ownership verification is required.
 
-## Fedora migration
+## Return to Windows
+
+The latest code, database (including editorial/statement vectors), research
+reports and restore commands are in the [Windows handoff](docs/WINDOWS.md).
+Use PostgreSQL **18** for that snapshot. The older Windows database can stay intact.
+
+## Earlier Fedora migration
 
 For the complete Fedora setup, database restore, and optional pgvector preparation, follow [docs/FEDORA.md](docs/FEDORA.md). The verified transfer snapshot is attached to [the migration release](https://github.com/ChatreshGudi/Coderise/releases/tag/fedora-transfer-2026-11-01). Read [docs/HANDOFF.md](docs/HANDOFF.md) to continue development in a new chat.
 
@@ -86,6 +92,16 @@ npm run build
 With the app running, `node scripts/check-web.mjs` checks the live API and pages using the imported Chatresh profile. Set CODERISE_TEST_HANDLE to another imported handle if needed. `node scripts/check-import.mjs PUBLIC_HANDLE` exercises import and writes public profile data to the local database.
 
 ## Embedding research
+
+The initial statement-only Ollama extraction pilot was stopped after slow,
+inaccurate results. See [the extraction pilot](docs/technique_extraction.md) for
+its protocol and limitations. [Coverage-aware retrieval](docs/retrieval.md) now
+imports existing editorials and caches editorial/statement embeddings with a
+small CPU encoder. Its experimental ranking uses stronger editorial similarity,
+weaker statement similarity, and the established baseline where text/history is
+missing. Set `CODERISE_SEMANTIC_RECOMMENDATIONS=1` to enable it after applying
+migration 006 and building the cache; the default remains the SQL baseline.
+No generated explanations or Ollama calls are needed for this path.
 
 [The evaluation report](docs/embedding_evaluation.md) compares MiniLM, MPNet, and a weighted-tag baseline on imported statements. This research is separate from the website's current ranking. To reproduce it, install `requirements.txt` and `requirements-statements.txt`, import the statements, then run `py scripts\evaluate_embeddings.py`. Model weights download on first use. Experiment data and vectors stay under ignored `reports/`.
 

@@ -1,6 +1,8 @@
 import "server-only";
 import { query } from "./db";
 import { integer, problemKey, topicValues, value, type Mode, type Params } from "./validation";
+import retrievalConfig from '../config/retrieval.json';
+import { rankWithCoverage, type RetrievalVectors, type RankingDecision } from './recommendation-ranking';
 
 export type Profile = {
   user_id: number; cf_handle: string; rating: number | null; max_rating: number | null;
@@ -13,7 +15,8 @@ export type Problem = {
   problem_id: number; contest_id: number; problem_index: string; name: string; rating: number | null;
   solved_count: number; tags: string[]; verdict: string | null; attempts: number;
 };
-export type Pick = Problem & { score: number; reason: string; previous_attempts: number; statement: string | null };
+export type Pick = Problem & { score: number; reason: string; previous_attempts: number; statement: string | null }
+  & Partial<Omit<RankingDecision,'problem_id'|'score'>>;
 export type Submission = { submission_id: number; contest_id: number; problem_index: string; name: string; rating: number | null; verdict: string; submitted_at: Date; language: string | null; time_ms: number | null };
 export type Topic = { name: string; attempts: number; accepted: number; wrong_attempts: number; proficiency: number; unique_solved: number };
 export type Job = { job_id: string; kind: string; handle: string | null; status: string; stage: string; created_at: Date; started_at: Date | null; finished_at: Date | null; counts: Record<string,number>; error_message: string | null };
@@ -25,10 +28,59 @@ export async function getProfile(handle: string): Promise<Profile | null> {
 export async function tags(): Promise<string[]> {
   return (await query<{ name: string }>("SELECT name FROM tag WHERE EXISTS(SELECT 1 FROM problem_tag pt WHERE pt.tag_id=tag.tag_id) ORDER BY name")).map(r=>r.name);
 }
-export async function recommendations(profile: Profile, mode: Mode, limit = 5): Promise<Pick[]> {
+async function baselineRecommendations(profile: Profile, mode: Mode, limit: number): Promise<Pick[]> {
   return query<Pick>(`SELECT r.*, ps.description AS statement, COALESCE((SELECT array_agg(t.name ORDER BY t.name) FROM problem_tag pt JOIN tag t USING(tag_id) WHERE pt.problem_id=r.problem_id),'{}') AS tags,
     CASE WHEN r.previous_attempts>0 THEN 'ATTEMPTED' ELSE NULL END AS verdict, r.previous_attempts AS attempts
     FROM recommend_practice($1,$2,$3) r LEFT JOIN problem_statement ps ON ps.problem_id=r.problem_id`, [profile.user_id,mode,limit]);
+}
+const retrievalJoins = `LEFT JOIN retrieval_current_embedding ee ON ee.problem_id=r.problem_id
+  AND ee.source_kind='editorial' AND ee.model=$4 AND ee.model_revision=$5 AND ee.recipe=$6
+  LEFT JOIN retrieval_current_embedding se ON se.problem_id=r.problem_id
+  AND se.source_kind='statement' AND se.model=$4 AND se.model_revision=$5 AND se.recipe=$6`;
+const vectorColumns = `ee.embedding AS editorial_vector,ee.content_hash AS editorial_hash,
+  se.embedding AS statement_vector,se.content_hash AS statement_hash`;
+
+export async function recommendationBatch(profile: Profile, mode: Mode, limit=5): Promise<{strategy:string;problems:Pick[]}> {
+  if(!Number.isInteger(limit)||limit<1||limit>20) throw new Error('Limit must be 1 to 20');
+  if(process.env.CODERISE_SEMANTIC_RECOMMENDATIONS!=='1')
+    return {strategy:'topic_difficulty_baseline',problems:await baselineRecommendations(profile,mode,limit)};
+  try {
+    const identity=[retrievalConfig.model,retrievalConfig.revision,retrievalConfig.recipe];
+    const rows=await query<Pick & RetrievalVectors>(`SELECT r.*,ps.description AS statement,${vectorColumns},
+      COALESCE((SELECT array_agg(t.name ORDER BY t.name) FROM problem_tag pt JOIN tag t USING(tag_id)
+        WHERE pt.problem_id=r.problem_id),'{}') AS tags,
+      CASE WHEN r.previous_attempts>0 THEN 'ATTEMPTED' ELSE NULL END AS verdict,r.previous_attempts AS attempts
+      FROM recommend_practice_candidates($1,$2,$3) r LEFT JOIN problem_statement ps ON ps.problem_id=r.problem_id
+      ${retrievalJoins}`, [profile.user_id,mode,retrievalConfig.candidateLimit,...identity]);
+    const anchors=await query<RetrievalVectors>(`WITH history AS (
+      SELECT problem_id,max(submitted_at) AS practiced_at,bool_or(verdict='OK') AS solved
+      FROM submission WHERE user_id=$1 AND verdict NOT IN ('TESTING','SUBMITTED','COMPILATION_ERROR') GROUP BY problem_id
+      ), recent AS (
+      SELECT problem_id FROM history WHERE solved=CASE
+        WHEN $2='fix_weaknesses' AND EXISTS(SELECT 1 FROM history WHERE NOT solved) THEN false
+        WHEN EXISTS(SELECT 1 FROM history WHERE solved) THEN true ELSE false END
+      ORDER BY practiced_at DESC,problem_id LIMIT $3)
+      SELECT ${vectorColumns} FROM recent r ${retrievalJoins}`,
+      [profile.user_id,mode,retrievalConfig.anchorLimit,...identity]);
+    const byId=new Map(rows.map(row=>[row.problem_id,row]));
+    const problems=rankWithCoverage(rows,anchors,limit).map(decision=>{
+      const {editorial_vector,editorial_hash,statement_vector,statement_hash,...row}=byId.get(decision.problem_id)!;
+      const suffix=decision.semantic_adjustment>1e-8
+        ? decision.similarity_source==='editorial'
+          ? ' Similar solution explanations to problems in your imported practice history.'
+          : ' Related statement text to problems in your imported practice history.'
+        : '';
+      return {...row,...decision,reason:row.reason+suffix};
+    });
+    return {strategy:problems.some(row=>row.similarity_source)?'coverage_aware_hybrid':'topic_difficulty_baseline',problems};
+  } catch(error) {
+    // Rolling deployments can serve the baseline before migration 006 is applied.
+    if(!['42P01','42883'].includes((error as {code?:string}).code??'')) throw error;
+    return {strategy:'topic_difficulty_baseline',problems:await baselineRecommendations(profile,mode,limit)};
+  }
+}
+export async function recommendations(profile: Profile, mode: Mode, limit=5): Promise<Pick[]> {
+  return (await recommendationBatch(profile,mode,limit)).problems;
 }
 export async function dashboard(profile: Profile) {
   const [topics, recent, weeks, ratings, verdicts, days] = await Promise.all([

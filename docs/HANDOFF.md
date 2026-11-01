@@ -1,12 +1,15 @@
 # Coderise development handoff
 
-Updated 1 November 2026. Read this before changing scope or continuing the Fedora move.
+Updated 1 November 2026. The user is returning to Windows; follow `docs/WINDOWS.md`.
 
 ## Project and user preferences
 
 - Repository: https://github.com/ChatreshGudi/Coderise (public), main branch.
 - Windows source checkout: `C:\Users\Gudic\Desktop\PESU\Subjects\DBMS\Mini project\Coderise`.
-- Target: Fedora on the same dual-boot laptop, with Ollama already installed. Make Fedora the primary environment after verifying the transfer. Follow `docs/FEDORA.md`.
+- Current target: Windows on the same dual-boot laptop. The latest release is
+  `windows-transfer-2026-11-01`; restore its PostgreSQL 18 snapshot into a new
+  Windows database, preserving the earlier Windows checkout/database. See
+  `docs/WINDOWS.md`. Fedora setup is complete; Ollama generation remains stopped.
 - The original design document governs the feature scope. Prefer fewer polished features. Stitch screenshots were inspiration, not authorization for extra features.
 - Public Codeforces handle only. No learner accounts, email, roles, login, handle verification, ownership checks, bookmarks, notes, queues, editor, or judge. Anyone can view any public profile.
 - Use local PostgreSQL. Do not introduce Docker.
@@ -33,7 +36,19 @@ Implemented polish:
 
 ## Database state and transfer
 
-Active schema is 001 plus migrations 002, 004, 005. The website uses `recommend_practice` from 005. Migration 003 is an **unfinished, unapplied experiment**. pgvector is **not installed in the Windows source database**, and there are **zero production embeddings**.
+Latest snapshot: `coderise-20261101-162508.dump`, PostgreSQL 18.6, 41,018,338 bytes,
+SHA-256 `057a7efc73709e386b952b2fd25c0592222d175147e5df102c8a507f701ceacb`.
+It includes migration 006, 6,155 editorials and 16,094 retrieval embeddings, plus
+the original imported catalogue/history. Every table count matched a restore into
+an isolated PostgreSQL 18 instance. Credentials and transient sync-job data are
+excluded. The Windows transfer release also preserves ignored research artifacts.
+Use PostgreSQL 18 on Windows; do not restore this newer snapshot over the old
+PostgreSQL 17 database or reapply schema migrations after restoring it.
+
+The transfer snapshot schema is 001 plus migrations 002, 004, 005. Fedora now
+also has migration 006 and the completed retrieval cache described below. The
+default website still uses `recommend_practice` from 005. Migration 003 is an
+**unfinished, unapplied experiment**; the current retrieval path needs no pgvector.
 
 Transfer release: https://github.com/ChatreshGudi/Coderise/releases/tag/fedora-transfer-2026-11-01
 
@@ -49,7 +64,8 @@ Existing Codeforces importers upsert catalogue/profiles and retain attribution f
 
 Completed research: read `docs/embedding_evaluation.md`, its results and manifest, and `scripts/evaluate_embeddings.py`. MiniLM statement embeddings sometimes followed story vocabulary instead of underlying algorithms. MPNet did not demonstrate a reliable enough held-out advantage to justify its much higher measured local CPU cost. The proxy labels favor topic-based retrieval; they do not establish learning outcomes. Do not claim statement vectors solve technique understanding or restore the draft's dominant semantic weight.
 
-Discussed direction, not yet implemented:
+Earlier proposed direction, superseded by the editorial retrieval implementation
+and relevance review below (do not resume this generation plan automatically):
 
 1. Use an LLM **offline through Ollama on Fedora** to extract structured core techniques, important observations, and prerequisites from statements. Qwen3-8B was discussed but postponed because of processing cost/time. Final model remains undecided; first inspect RAM, free disk, GPU/VRAM, and `ollama list`.
 2. Start with about 100 problems and review technique outputs before scaling. Save structured results with model/prompt versions and source hashes; make batches resumable. These are proposed implementation requirements for the next stage, not existing functionality.
@@ -63,8 +79,69 @@ Discussed direction, not yet implemented:
 
 ## Verification and next actions
 
+Latest relevance review: see `docs/recommendation_quality_review.md`. Nine
+profile/mode cases (45 positions) introduced 15 suggestions; this is change,
+not an accuracy measurement. Keep semantic ranking off by default. Confirmed
+defect: the latest-30 history cutoff precedes checking vector availability.
+Petr has 631 compatible solved editorial references but zero in the selected
+30; tourist's solved modes rely on only three. Next implement selection of recent
+compatible references per source channel, then repeat the review. Several high
+cosines reflect broad vocabulary rather than core algorithms; one interactive
+search pair has a useful structural connection. No weights were tuned. The
+read-only `scripts/audit_recommendations.py` saves evidence in ignored
+`reports/recommendation_quality/` and checks similarity agreement with the saved
+application comparison. No generation was resumed or production setting enabled.
+
+Latest implementation: editorial-first / statement-fallback retrieval is now
+implemented; see `docs/retrieval.md`. Migration 006 is additive, preserves the
+original baseline, and uses dedicated `problem_editorial` and `retrieval_embedding`
+tables with native normalized 384-float arrays. A pinned MiniLM ONNX CPU encoder
+replaces generation. Source hashes and model/revision/recipe gate freshness.
+The import found 6,155 editorials, of which 6,111 passed basic text checks and 44
+were held for review. These are not expert correctness labels. The new ranking
+is opt-in via `CODERISE_SEMANTIC_RECOMMENDATIONS=1`; defaults remain baseline until
+relevance review. Report paths: `reports/editorial_import/coverage.json`,
+`reports/retrieval_embeddings.json`, and `reports/recommendation_comparison.md`.
+The cache completed: 6,111 editorial and 9,983 statement vectors. Source tiers are
+6,111 editorial / 3,967 statement fallback / 1,542 catalogue-only. Twelve TS tests,
+twelve Python tests, rollback-only DB checks, all nine profile/mode API checks and
+the production build passed. Build now uses Webpack to avoid Turbopack following
+the Fedora `.venv/bin/python` symlink outside the project root. The local `.env`
+was not changed to enable the experimental flag; restart with the flag to try it.
+Do not resume the abandoned statement-solving Ollama run. Weights are bounded
+experimental settings, not calibrated probabilities or proven quality gains.
+
+Latest steering: the user stopped the statement-only model comparison because
+inference was slow and outputs inaccurate. The remaining Python process was
+interrupted; do not resume it automatically. Qwen3 8B is installed. Initial
+outputs and assistant review notes remain in ignored `reports/technique_pilot/`.
+The new direction is editorial/solution-grounded embeddings. The same
+`open-r1/codeforces` dataset has an `editorial` field (the dataset card reports
+about 60% coverage across its problems); the existing statement importer excludes
+it. First audit actual coverage and quality at the pinned dataset revision,
+joining through stored `source_problem_id` and `source_revision`, then design an
+editorial import with attribution/content hashes. Embed supplied explanations as
+a baseline before asking an LLM to summarize techniques. Dataset-wide coverage
+must not be presented as measured coverage of the local catalogue.
+
+Fedora migration completed in this session: PostgreSQL 18.6 (PGDG), restored table
+counts matched the published manifest, pgAdmin connected, and the user confirmed
+the local website runs. The local role/database is `coderise`; credentials stay
+in ignored `.env`. PGDG uses the `postgresql-18` service and `/usr/pgsql-18/bin`.
+
+Technique extraction now has a resumable local-Ollama harness:
+`scripts/extract_techniques.py`. Read `docs/technique_extraction.md`. The initial
+comparison uses Qwen3 8B and the already installed Qwen2.5-Coder 7B on the same
+frozen 10-problem sample. Manifest, raw responses, timing and review report live
+under ignored `reports/technique_pilot/`. No production vectors or recommendation
+SQL are changed by this harness. Review quality and failure modes before selecting
+a model or scaling; valid JSON and grounded quotes do not establish correctness.
+
 Recent production build and type checking pass; six unit tests cover validation, repeated topic parameters, and page-window boundaries. `node scripts/check-web.mjs` passes HTTP/database integration checks. Browser checks covered filtering/chips, page jumps, keyboard interactions, previews/math, chart readouts, red highlights, and mobile overflow.
 
 On Fedora: follow the restore guide, run npm test and npm run build, start npm run dev, then node scripts/check-web.mjs. Browser/native automation capabilities may differ on Linux; report unavailable checks rather than claiming they ran.
 
-Next work is **Fedora environment verification**, then the small Ollama extraction experiment. Preserve the finished UI and agreed scope. Catalogue scheduling and any new predictive feature need their own concrete design rather than being silently added.
+Next work is **compatible reference selection**, followed by another relevance
+comparison and an independent review set; see `docs/recommendation_quality_review.md`.
+Fedora setup and embedding generation are complete. Preserve the finished UI and
+agreed scope. Catalogue scheduling and predictive features need their own design.

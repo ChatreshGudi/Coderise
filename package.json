@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1",
     "db:web": "node scripts/migrate-web.mjs",
+    "db:retrieval": "node scripts/migrate-retrieval.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },

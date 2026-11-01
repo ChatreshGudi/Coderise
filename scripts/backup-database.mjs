@@ -11,11 +11,14 @@ const args = process.argv.slice(2);
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const directory = resolve(option('--output', 'backups'));
 const pgBin = option('--pg-bin', '');
+// Optional separate local PostgreSQL instance for restore verification.
+// This avoids granting CREATEDB to the application role.
+const verificationUrl = option('--verify-url', '');
 const stem = `coderise-${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '-')}`;
 const dump = join(directory, `${stem}.dump`);
 const config = { host: process.env.PGHOST || 'localhost', port: Number(process.env.PGPORT || 5432), database: process.env.PGDATABASE || 'coderise', user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD };
 const env = { ...process.env, PGHOST: config.host, PGPORT: String(config.port), PGDATABASE: config.database, PGUSER: config.user };
-const allowed = new Set(['app_user', 'contest', 'problem', 'tag', 'problem_tag', 'submission', 'rating_change', 'user_tag_stat', 'recommendation', 'tag_prerequisite', 'problem_embedding', 'problem_statement', 'sync_job']);
+const allowed = new Set(['app_user', 'contest', 'problem', 'tag', 'problem_tag', 'submission', 'rating_change', 'user_tag_stat', 'recommendation', 'tag_prerequisite', 'problem_embedding', 'problem_statement', 'sync_job', 'problem_editorial', 'retrieval_embedding']);
 const quote = name => `"${name.replaceAll('"', '""')}"`;
 function run(command, parameters) {
   return new Promise((ok, fail) => {
@@ -28,10 +31,12 @@ function run(command, parameters) {
   });
 }
 const source = new Client(config);
+const verifier = verificationUrl ? new Client({ connectionString: verificationUrl }) : source;
 let temporaryDatabase;
 try {
   await mkdir(directory, { recursive: true });
   await source.connect();
+  if (verifier !== source) await verifier.connect();
   await source.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   const tables = (await source.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows.map(row => row.tablename);
   if (tables.some(name => !allowed.has(name))) throw new Error('Unexpected database tables: review the backup allowlist before publishing.');
@@ -54,9 +59,15 @@ try {
     if (process.env.CODERISE_ADMIN_TOKEN && text.includes(process.env.CODERISE_ADMIN_TOKEN)) throw new Error('A configured admin token appears in the dump. Do not publish this backup.');
   } finally { await unlink(inspection).catch(() => {}); }
   temporaryDatabase = `coderise_restore_check_${Date.now()}`;
-  await source.query(`CREATE DATABASE ${quote(temporaryDatabase)} TEMPLATE template0`);
-  await run('pg_restore', ['--exit-on-error', '--no-owner', '--no-privileges', `--dbname=${temporaryDatabase}`, dump]);
-  const restored = new Client({ ...config, database: temporaryDatabase });
+  await verifier.query(`CREATE DATABASE ${quote(temporaryDatabase)} TEMPLATE template0`);
+  let restoreTarget = temporaryDatabase;
+  if (verificationUrl) {
+    const target = new URL(verificationUrl);
+    target.pathname = `/${temporaryDatabase}`;
+    restoreTarget = target.toString();
+  }
+  await run('pg_restore', ['--exit-on-error', '--no-owner', '--no-privileges', `--dbname=${restoreTarget}`, dump]);
+  const restored = new Client(verificationUrl ? { connectionString: restoreTarget } : { ...config, database: temporaryDatabase });
   try {
     await restored.connect();
     for (const [table, count] of Object.entries(counts)) {
@@ -74,6 +85,7 @@ try {
   console.error('Backup failed:', error.message);
   process.exitCode = 1;
 } finally {
-  if (temporaryDatabase) await source.query(`DROP DATABASE ${quote(temporaryDatabase)}`).catch(error => { console.error('Temporary restore database cleanup failed:', error.message); process.exitCode = 1; });
+  if (temporaryDatabase) await verifier.query(`DROP DATABASE ${quote(temporaryDatabase)}`).catch(error => { console.error('Temporary restore database cleanup failed:', error.message); process.exitCode = 1; });
+  if (verifier !== source) await verifier.end();
   await source.end();
 }
