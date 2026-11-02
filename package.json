@@ -9,6 +9,7 @@
     "db:web": "node scripts/migrate-web.mjs",
     "db:retrieval": "node scripts/migrate-retrieval.mjs",
     "db:pgvector": "node scripts/migrate-pgvector.mjs",
+    "db:graph": "node scripts/sync-learning-graph.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
@@ -18,6 +19,7 @@
     "@radix-ui/react-select": "^2.4.1",
     "katex": "^0.19.1",
     "lucide-react": "^0.468.0",
+    "neo4j-driver": "^5.28.3",
     "next": "16.4.3",
     "pg": "^8.16.3",
     "react": "19.3.1",

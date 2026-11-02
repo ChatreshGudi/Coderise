@@ -8,7 +8,7 @@ import { InteractiveRatingChart } from "./rating-chart";
 export async function Header({profile,handle='',active=''}:{profile?:Profile|null;handle?:string;active?:string}){
   const selected=profile?.cf_handle||handle;
   return <header className="site-header"><Link href="/" className="brand"><span className="brand-square"/>CODERISE</Link><span className="brand-caption">THE PRACTICE WORKSPACE</span>
-    <nav aria-label="Main navigation">{[['Dashboard','/dashboard'],['Recommendations','/recommendations'],['Problems','/problems']].map(([name,path])=><Link key={path} href={withParams(path,{handle:selected})} className={active===name.toLowerCase()?'active':''} aria-current={active===name.toLowerCase()?'page':undefined}>[{name}]</Link>)}</nav>
+    <nav aria-label="Main navigation">{[['Dashboard','/dashboard'],['Recommendations','/recommendations'],['Problems','/problems'],['Learning path','/path']].map(([name,path])=><Link key={path} href={withParams(path,{handle:selected})} className={active===name.toLowerCase()?'active':''} aria-current={active===name.toLowerCase()?'page':undefined}>[{name}]</Link>)}</nav>
     <div className="header-profile">{selected&&<RefreshProfile handle={selected} lastSynced={profile?.last_synced_at?new Date(profile.last_synced_at).toISOString():null}/>}<Link href="/?switch=1" className="handle-switch" title="Switch Codeforces handle">{selected||'Enter handle'} <span aria-hidden="true">↗</span></Link>{profile&&<span className="rank-label">{profile.rating??'Unrated'}{profile.rank_title?` ${profile.rank_title}`:''}</span>}</div>
   </header>;
 }

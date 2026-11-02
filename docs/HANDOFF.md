@@ -4,6 +4,24 @@ Updated 1 November 2026. The user is returning to Windows; follow `docs/WINDOWS.
 
 ## Latest update: pgvector required for the course project
 
+Neo4j learning path implementation added on 2 November: see `docs/LEARNING_PATH.md`.
+Latest user-directed revision: `/path` is problem-first. Paste a Codeforces ID/link
+to build a combined prerequisite map from all mapped tags and receive up to three
+distinct unsolved practice problems per topic. `lib/problem-preparation.ts` and
+`lib/preparation-rules.ts` implement strict rating/solved/target filters and explicit
+800/unrated/unmapped cases. Past solves are collapsed. Topic exploration remains
+secondary via `view=topic`; the detail page links directly to preparation. Test with
+`scripts/check-problem-preparation.ts`. No solution generation or new model is used.
+The subsequent goal-first revision removes the start selector and shortest-route
+UI. It adds an interactive graph/list inspector, conservative background review
+suggestions, and a derived Neo4j Profile -> SOLVED -> Problem -> HAS_TAG -> Topic
+projection refreshed from PostgreSQL on map requests. Recent accepted examples
+come from graph traversal. Run `npm run db:graph` to add projection constraints.
+It uses a dedicated curated topic graph (19 nodes, 21 explained edges), optional
+shortest route, all ancestor branches and live PostgreSQL practice evidence. The
+screen is `/path`, with API `/api/path` and idempotent `npm run db:graph`. Redis
+is still not implemented. No mastery or study-time prediction is claimed.
+
 This update supersedes the older array-storage/feature-off notes below. Native
 pgvector v0.8.7 is installed in the portable PostgreSQL 18 runtime. The active
 database is `coderise_windows` at `127.0.0.1:5433`; credentials remain in ignored

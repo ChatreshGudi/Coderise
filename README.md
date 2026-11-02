@@ -75,6 +75,7 @@ Statements are optional for browsing: missing statements link to the original Co
 - Public-handle import, switching, manual refresh, and active-page refresh.
 - Dashboard with imported solves, rating history, weekly activity, topic statistics, verdicts, and recent submissions.
 - Three practice modes: Warm up, Stretch, and Fix weaknesses.
+- Problem-first preparation: paste a Codeforces link/ID, explore its Neo4j background map and try easier unsolved practice before retrying. Topic exploration remains available. Follow [the local graph setup](docs/LEARNING_PATH.md).
 - Problem search, rating/topic filters, imported-unsolved filtering, sorting, and pagination.
 - Statement pages with mathematical notation, examples, attempts, and related-topic problems.
 - Separate developer sync console, disabled until CODERISE_ADMIN_TOKEN is configured in the server environment.
