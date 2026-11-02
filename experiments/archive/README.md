@@ -5,4 +5,4 @@ These `.txt` files preserve the prior Windows-only experiments for continuity. T
 - `003_recommendation_functions.sql.txt`: unapplied pgvector migration with unresolved JSONB constraint/type conversion and unvalidated recommendation/prediction weights.
 - `generate_embeddings.py.txt`: old MiniLM generator using names/tags, not the planned statement/technique pipeline. Its original script-relative paths are preserved for reference only.
 
-Read `docs/HANDOFF.md` and the completed embedding evaluation before implementing replacements. Original local Windows drafts are left unchanged.
+Read `docs/HANDOFF.md` and the completed embedding evaluation before implementing replacements. Duplicate executable copies were removed during cleanup; these archived text files preserve the old experiments.

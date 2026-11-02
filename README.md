@@ -111,3 +111,7 @@ No generated explanations or Ollama calls are needed for this path.
 Use the public [Codeforces API](https://codeforces.com/apiHelp/methods) for profiles and catalogue updates. Statement source: [Open R1 Codeforces dataset](https://huggingface.co/datasets/open-r1/codeforces); retain its attribution and review its dataset card when redistributing content.
 
 Commit source, migrations, lockfiles, and documentation. Do not commit environment credentials, `.venv`, `node_modules`, build output, model files, or database data.
+
+## Project explanation and database design
+
+Start with [the detailed project guides](docs/explained/README.md) for frontend, backend, database, recommendation and presentation explanations. See [the database design document](CODERISE_DATABASE_DESIGN.md) for the ER diagram, schema, data dictionary and SQL export.
