@@ -103,3 +103,6 @@ Local warm-cache recommendation timings were 22–279 ms across the nine cases;
 these are development measurements, not a deployment guarantee. Similarity is
 not solve probability or proof of technique equivalence. Better relevance still
 needs independent labels; the earlier MiniLM quality limitations remain.
+
+Read the [current recommendation evaluation](RECOMMENDATION_EVALUATION.md) for
+measured ranking changes, source bias, diversity and inspected technique matches.

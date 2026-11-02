@@ -1,5 +1,9 @@
 # Recommendation relevance review — 2026-11-01
 
+For the complete post-fix evaluation, including all 24 introduced suggestions,
+see [the current evaluation](RECOMMENDATION_EVALUATION.md). The original review
+below remains historical evidence, not the current deployment decision.
+
 ## Subsequent implementation update
 
 Migration 007 now uses native pgvector storage and SQL cosine scoring. Compatible
