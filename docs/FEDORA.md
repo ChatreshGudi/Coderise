@@ -1,5 +1,10 @@
 # Move Coderise to Fedora
 
+## Accounts and private lists update
+
+After updating code or restoring an older transfer snapshot, run `npm ci` and `npm run db:accounts`. Set `CODERISE_ORIGIN` to the exact browser origin (for local use, `http://127.0.0.1:3000`). Accounts/profile/private lists and administrator setup are documented in [ACCOUNTS_LISTS.md](ACCOUNTS_LISTS.md). Shared developer-token access is retired. Shareable backups exclude all account/session/private-list rows. Earlier historical account/token descriptions below are superseded by this update.
+
+
 This restores the working Windows project on Fedora, including the imported data. Keep Fedora as the main development environment after the move; dual-boot databases do not synchronize automatically.
 
 ## 1. Install the essentials

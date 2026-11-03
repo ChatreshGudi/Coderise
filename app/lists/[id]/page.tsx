@@ -1,0 +1,18 @@
+import Link from 'next/link';
+import { redirect,notFound } from 'next/navigation';
+import { getAccount } from '@/lib/auth';
+import { listContent } from '@/lib/lists';
+import { AccountError } from '@/lib/list-rules';
+import { integer,value,withParams,cfProblem,type Params } from '@/lib/validation';
+import { Header,Footer,Strip,Empty } from '@/components/workspace';
+import { ListEditor,RemoveFromList } from '@/components/list-controls';
+import { Pagination } from '@/components/pagination';
+import { StyledSelect } from '@/components/styled-select';
+export const dynamic='force-dynamic';
+export const metadata={title:'Private practice list'};
+export default async function ListPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<Params>}){
+ const account=await getAccount();if(!account)redirect('/login');const {id}=await params,p=await searchParams;
+ const q=value(p,'q').slice(0,200),status=value(p,'status');let data;
+ try{data=await listContent(account.account_id,id,q,status,integer(value(p,'page'),1,1,10000));}catch(e){if(e instanceof AccountError)notFound();throw e;}
+ return <><Header active="lists"/><Strip right={<Link href="/lists">ALL YOUR LISTS ↗</Link>}>PRIVATE LIST / {account.username}</Strip><main id="main" className="page account-page"><div className="page-heading"><span className="eyebrow muted">Your collection</span><h1>{data.list.name}</h1>{data.list.description&&<p className="page-description">{data.list.description}</p>}<p className="small muted">Only your Coderise account can access this list. {account.preferred_cf_handle?`Solved status uses ${account.preferred_cf_handle}'s imported history.`:'Set a preferred Codeforces handle in your profile to see solved status.'}</p></div><details className="list-edit-details"><summary className="mono">Edit list / delete</summary><ListEditor list={data.list}/></details><form className="list-search" method="GET"><label className="sr-only" htmlFor="list-search">Search saved problems</label><input id="list-search" name="q" defaultValue={q} maxLength={200} placeholder="Search saved problems by name or ID"/><label id="list-status-label" className="sr-only" htmlFor="list-status">Imported status</label><StyledSelect id="list-status" name="status" defaultValue={status} options={[{value:'',label:'All problems'},{value:'solved',label:'Solved'},{value:'unsolved',label:'Unsolved'}]}/><button className="button primary">Search</button></form><p className="small muted">{data.count} matching {data.count===1?'problem':'problems'}</p>{data.rows.length?<div className="table-scroll"><table className="data-table"><thead><tr><th>ID</th><th>Problem</th><th>Rating</th><th>Imported status</th><th>Actions</th></tr></thead><tbody>{data.rows.map(row=><tr key={row.problem_id}><td className="mono">{row.contest_id}{row.problem_index}</td><td><Link href={withParams(`/problems/${row.contest_id}/${row.problem_index}`,{handle:account.preferred_cf_handle})}>{row.name} ↗</Link></td><td className="mono">{row.rating??'Unrated'}</td><td className={row.solved?'accepted':'muted'}>{row.solved?'Solved':account.preferred_cf_handle?'Not solved in imported history':'No handle selected'}</td><td><div className="list-row-actions"><a className="text-link" target="_blank" rel="noreferrer" href={cfProblem(row.contest_id,row.problem_index)}>Solve ↗</a><RemoveFromList listId={data.list.list_id} problemId={row.problem_id}/></div></td></tr>)}</tbody></table></div>:<Empty title={q||status?'No matches in this list.':'Ready for your next problem.'}>Use “Save to list” on a catalogue problem, recommendation, or problem page.</Empty>}<Pagination page={data.page} totalPages={data.pages} path={`/lists/${id}`} filters={{q,status}}/></main><Footer/></>;
+}

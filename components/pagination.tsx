@@ -5,11 +5,11 @@ import { pageNumbers, withParams } from "@/lib/validation";
 import { NumberField } from "./number-field";
 
 type Filters = Record<string, string | string[] | number | null | undefined>;
-export function Pagination({ page, totalPages, filters }: { page: number; totalPages: number; filters: Filters }) {
-  const link = (target: number) => withParams("/problems", { ...filters, page: target });
+export function Pagination({ page, totalPages, filters, path="/problems" }: { page: number; totalPages: number; filters: Filters; path?: string }) {
+  const link = (target: number) => withParams(path, { ...filters, page: target });
   const pages = pageNumbers(page, totalPages);
   return <div className="pagination-controls">
-    <nav className="pagination-links" aria-label="Problem pages">
+    <nav className="pagination-links" aria-label="Pages">
       {page > 1 ? <Link className="button secondary" href={link(page - 1)} aria-label="Previous page"><ChevronLeft size={14} /><span>Previous</span></Link> : <span className="button disabled" aria-disabled="true"><ChevronLeft size={14} /><span>Previous</span></span>}
       <span className="mobile-page mono">Page {page} of {totalPages}</span>
       <span className="page-links">{pages.map((target, index) => <span className="page-link-item" key={target}>
@@ -18,7 +18,7 @@ export function Pagination({ page, totalPages, filters }: { page: number; totalP
       </span>)}</span>
       {page < totalPages ? <Link className="button secondary" href={link(page + 1)} aria-label="Next page"><span>Next</span><ChevronRight size={14} /></Link> : <span className="button disabled" aria-disabled="true"><span>Next</span><ChevronRight size={14} /></span>}
     </nav>
-    {totalPages > 1 && <form className="page-jump" action="/problems">
+    {totalPages > 1 && <form className="page-jump" action={path}>
       {Object.entries(filters).flatMap(([name, value]) => (Array.isArray(value) ? value : [value]).filter(v => v != null && v !== "").map((v, i) => <input key={`${name}-${i}`} type="hidden" name={name} value={String(v)} />))}
       <label htmlFor="jump-page">Go to page</label><NumberField id="jump-page" name="page" label="page" required min={1} max={totalPages} defaultValue={page} key={page} /><button className="button secondary" type="submit">Go</button>
     </form>}

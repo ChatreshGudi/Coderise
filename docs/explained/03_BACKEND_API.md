@@ -1,5 +1,8 @@
 # Backend, API, validation and security
 
+> Current account update: username/password authentication, revocable database sessions, profile preferences and private lists are implemented. Public Codeforces data remains accessible. Administrator accounts replace the old shared token. Read [the account/list guide](../ACCOUNTS_LISTS.md) for the new tables, flows and security. Earlier public-only descriptions refer to the original version.
+
+
 ## 4. Backend: the coordinator
 
 Next.js route handlers and server-only helpers sit between the UI and databases. They validate handles, ratings, modes, page numbers, and problem IDs. SQL values are passed as parameters; sortable fields and modes use allowlists. The server returns the fields needed by the interface rather than exposing database credentials or complete vector arrays.
@@ -12,7 +15,7 @@ Main API examples:
 - `/api/path`: preparation for a problem or topic exploration.
 - `/api/sync`: starts or reuses a public-profile import job.
 
-The protected developer console controls catalogue operations using the existing developer token. It is separate from public browsing.
+The protected developer console checks the signed-in account administrator role in PostgreSQL. It is separate from public browsing.
 
 ## Request validation and database access
 
@@ -39,6 +42,6 @@ Preparation URLs are parsed as identifiers; the server does not fetch arbitrary 
 
 ## Current security boundaries
 
-Public profiles are intentionally visible to anyone. The handle cookie is a preference, not authentication. The developer console uses a separate shared token and server-side checks. SQL is parameterized; browser POST requests have origin checks; worker processes are started with an argument array and shell disabled.
+Public profiles are intentionally visible to anyone. The handle cookie is a preference, not authentication. The developer console requires a database-backed administrator session and server-side role checks. SQL is parameterized; browser POST requests have origin checks; worker processes are started with an argument array and shell disabled.
 
-Ignored .env files keep credentials out of Git but remain plaintext local files. Do not call them encrypted storage. Learner authentication is not implemented.
+Ignored .env files keep credentials out of Git but remain plaintext local files. Do not call them encrypted storage. Learner authentication and private lists are now available.

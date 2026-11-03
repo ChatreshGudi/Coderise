@@ -1,5 +1,8 @@
 # Coderise — Database Design
 
+> Schema update: the original 15-table reference below is extended by five account/list tables in the migration 008 addendum at the end. Account and administrator-token descriptions in the original snapshot are superseded by [the current account guide](docs/ACCOUNTS_LISTS.md). The current physical schema has 20 tables.
+
+
 Implementation-aligned reference for the Coderise course project. PostgreSQL is the system of record, pgvector stores semantic retrieval vectors, and Neo4j stores the derived topic prerequisite and learning-map graph. This document describes the current implementation, including reserved legacy structures where called out.
 
 ---
@@ -230,7 +233,7 @@ Neo4j outages produce an unavailable preparation/map response; other workspace p
 
 # Relational schema and database objects
 
-Catalogue-verified on 2 November 2026. Complete column-level details: [data dictionary](DATA_DICTIONARY.md). The executable schema-only export is [schema.sql](schema.sql).
+Catalogue-verified on 2 November 2026. Complete column-level details: [data dictionary](#data-dictionary). The executable schema-only export is [schema.sql](#schema-only-sql-export).
 
 ## app_user
 
@@ -2095,4 +2098,65 @@ ALTER TABLE ONLY public.user_tag_stat
 --
 
 \unrestrict ZQqQTTs9zTpM67P0fIsm8D67daXMKSpUubZ1mB2jU0pb4O7wls6j8Xa1DKwcthS
+```
+
+
+## Migration 008 addendum
+
+Site accounts are separate from imported Codeforces profiles. `site_account` owns private `problem_list` rows and expiring `auth_session` records. `problem_list_item` references catalogue problems. `auth_throttle` stores hashed rate-limit counters. All account/session/private-list rows are excluded from shareable database snapshots. The exact additive DDL follows; apply it after the base schema, or run `npm run db:accounts`. Do not reapply the original full schema over a populated database.
+
+```mermaid
+erDiagram
+    SITE_ACCOUNT ||--o{ AUTH_SESSION : has
+    SITE_ACCOUNT ||--o{ PROBLEM_LIST : owns
+    PROBLEM_LIST ||--o{ PROBLEM_LIST_ITEM : contains
+    PROBLEM ||--o{ PROBLEM_LIST_ITEM : saved_in
+```
+
+For field meanings, limits and ownership rules see [ACCOUNTS_LISTS.md](docs/ACCOUNTS_LISTS.md).
+
+```sql
+-- Local site accounts are distinct from imported public Codeforces profiles.
+BEGIN;
+CREATE TABLE IF NOT EXISTS site_account (
+ account_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ username TEXT NOT NULL CHECK(username ~ '^[a-z0-9_]{3,30}$') UNIQUE,
+ display_name TEXT NOT NULL CHECK(length(trim(display_name)) BETWEEN 1 AND 60),
+ password_hash TEXT NOT NULL CHECK(password_hash LIKE '$argon2id$%'),
+ role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','admin')),
+ preferred_cf_handle TEXT CHECK(preferred_cf_handle IS NULL OR preferred_cf_handle ~ '^[a-zA-Z0-9_.-]{1,40}$'),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS auth_session (
+ token_hash TEXT PRIMARY KEY CHECK(token_hash ~ '^[0-9a-f]{64}$'),
+ account_id BIGINT NOT NULL REFERENCES site_account(account_id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ expires_at TIMESTAMPTZ NOT NULL CHECK(expires_at>created_at)
+);
+CREATE INDEX IF NOT EXISTS auth_session_account_idx ON auth_session(account_id);
+CREATE INDEX IF NOT EXISTS auth_session_expiry_idx ON auth_session(expires_at);
+CREATE TABLE IF NOT EXISTS auth_throttle (
+ key_hash TEXT PRIMARY KEY CHECK(key_hash ~ '^[0-9a-f]{64}$'),
+ attempts INTEGER NOT NULL CHECK(attempts>0),
+ expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_throttle_expiry_idx ON auth_throttle(expires_at);
+CREATE TABLE IF NOT EXISTS problem_list (
+ list_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ account_id BIGINT NOT NULL REFERENCES site_account(account_id) ON DELETE CASCADE,
+ name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 80),
+ description TEXT NOT NULL DEFAULT '' CHECK(length(description)<=500),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS problem_list_account_updated_idx ON problem_list(account_id,updated_at DESC);
+CREATE TABLE IF NOT EXISTS problem_list_item (
+ list_id BIGINT NOT NULL REFERENCES problem_list(list_id) ON DELETE CASCADE,
+ problem_id BIGINT NOT NULL REFERENCES problem(problem_id) ON DELETE RESTRICT,
+ added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ PRIMARY KEY(list_id,problem_id)
+);
+COMMIT;
+
 ```

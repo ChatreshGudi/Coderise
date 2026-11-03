@@ -43,3 +43,7 @@ Views are named queries, not automatically stored copies. Functions implement se
 Read db/init/001_schema.sql and migrations 002, 004, 005, 006, 007. Migration 007 converts retrieval vectors to native vector(384). The untracked 003 draft is not part of the active migration chain. The root CODERISE_DATABASE_DESIGN.md lists exact columns, constraints, indexes, and view definitions.
 
 For the presentation, follow one submission's foreign keys to its profile/problem, then follow that problem's tags. Show a view and a function before explaining query optimization.
+
+## Account and list extension
+
+Migration 008 adds site_account, auth_session, auth_throttle, problem_list and problem_list_item. The physical schema now has 20 tables. Imported app_user profiles stay separate from Coderise login accounts. See [the account/list guide](../ACCOUNTS_LISTS.md) for constraints, session lifecycle, ownership and the new relationships.

@@ -1,0 +1,4 @@
+import { updateAccount,changeCredentials } from '@/lib/account-store';
+import { requireAccount,readAccountBody,authResponse,accountFailure } from '@/lib/auth';
+export async function PATCH(request:Request){try{const body=await readAccountBody(request),account=await requireAccount();await updateAccount(account.account_id,body);const response=authResponse({ok:true});response.cookies.set('coderise_handle','',{path:'/',maxAge:0});return response;}catch(e){return accountFailure(e);}}
+export async function DELETE(request:Request){try{const body=await readAccountBody(request),account=await requireAccount();await changeCredentials(account.account_id,body.current_password,null,true);const response=authResponse({ok:true},200,null);response.cookies.set('coderise_handle','',{path:'/',maxAge:0});return response;}catch(e){return accountFailure(e);}}

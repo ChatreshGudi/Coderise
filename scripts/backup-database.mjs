@@ -19,6 +19,9 @@ const dump = join(directory, `${stem}.dump`);
 const config = { host: process.env.PGHOST || 'localhost', port: Number(process.env.PGPORT || 5432), database: process.env.PGDATABASE || 'coderise', user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD };
 const env = { ...process.env, PGHOST: config.host, PGPORT: String(config.port), PGDATABASE: config.database, PGUSER: config.user };
 const allowed = new Set(['app_user', 'contest', 'problem', 'tag', 'problem_tag', 'submission', 'rating_change', 'user_tag_stat', 'recommendation', 'tag_prerequisite', 'problem_embedding', 'problem_statement', 'sync_job', 'problem_editorial', 'retrieval_embedding']);
+const privateTables = new Set(['site_account','auth_session','auth_throttle','problem_list','problem_list_item']);
+for (const name of privateTables) allowed.add(name);
+const excludedTables = new Set(['sync_job', ...privateTables]);
 const quote = name => `"${name.replaceAll('"', '""')}"`;
 function run(command, parameters) {
   return new Promise((ok, fail) => {
@@ -40,13 +43,13 @@ try {
   await source.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   const tables = (await source.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows.map(row => row.tablename);
   if (tables.some(name => !allowed.has(name))) throw new Error('Unexpected database tables: review the backup allowlist before publishing.');
-  const suspicious = await source.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND column_name ~* '(password|secret|token|email|session)' ");
+  const suspicious = await source.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND NOT (table_name=ANY($1::text[])) AND column_name ~* '(password|secret|token|email|session)' ", [[...privateTables]]);
   if (suspicious.rows.length) throw new Error('Potentially sensitive columns require manual review before publishing.');
   const counts = {};
-  for (const table of tables) counts[table] = table === 'sync_job' ? 0 : Number((await source.query(`SELECT count(*) FROM public.${quote(table)}`)).rows[0].count);
+  for (const table of tables) counts[table] = excludedTables.has(table) ? 0 : Number((await source.query(`SELECT count(*) FROM public.${quote(table)}`)).rows[0].count);
   const snapshot = (await source.query('SELECT pg_export_snapshot() AS snapshot')).rows[0].snapshot;
   const serverVersion = (await source.query('SHOW server_version')).rows[0].server_version;
-  await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', '--no-tablespaces', '--exclude-table-data=public.sync_job', `--snapshot=${snapshot}`, `--file=${dump}`]);
+  await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', '--no-tablespaces', ...[...excludedTables].map(name => `--exclude-table-data=public.${name}`), `--snapshot=${snapshot}`, `--file=${dump}`]);
   await source.query('COMMIT');
   const inspection = `${dump}.inspection.sql`;
   try {
@@ -77,7 +80,7 @@ try {
   } finally { await restored.end(); }
   const bytes = await readFile(dump);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
-  const manifest = { file: basename(dump), created_at: new Date().toISOString(), server_version: serverVersion, bytes: bytes.length, sha256, format: 'PostgreSQL custom archive', excluded_data: ['public.sync_job'], credentials_included: false, restore_verified: true, counts };
+  const manifest = { file: basename(dump), created_at: new Date().toISOString(), server_version: serverVersion, bytes: bytes.length, sha256, format: 'PostgreSQL custom archive', excluded_data: [...excludedTables].map(name => `public.${name}`), credentials_included: false, restore_verified: true, counts };
   await writeFile(`${dump}.json`, JSON.stringify(manifest, null, 2) + '\n');
   await writeFile(`${dump}.sha256`, `${sha256}  ${basename(dump)}\n`);
   console.log(JSON.stringify(manifest, null, 2));

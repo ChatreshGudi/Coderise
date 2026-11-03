@@ -11,12 +11,15 @@
     "db:pgvector": "node scripts/migrate-pgvector.mjs",
     "db:graph": "node scripts/sync-learning-graph.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "db:accounts": "node scripts/migrate-accounts.mjs",
+    "account:manage": "node scripts/manage-account.mjs"
   },
   "dependencies": {
     "@fontsource/geist": "^5.2.0",
     "@fontsource/jetbrains-mono": "^5.2.0",
     "@radix-ui/react-select": "^2.4.1",
+    "argon2": "0.45.1",
     "katex": "^0.19.1",
     "lucide-react": "^0.468.0",
     "neo4j-driver": "^5.28.3",

@@ -34,3 +34,7 @@ An active-page refresh is polling while the website is visible. Closing the site
 Git transports source and configuration examples. A database dump transports imported rows and vectors. The backup utility restore-checks a disposable database and compares counts; the manifest/checksum describes that snapshot. The target needs the required PostgreSQL version and matching pgvector server extension before an appropriate restore. Neo4j must be running/configured and its managed graph can be synced again.
 
 Read docs/WINDOWS.md or docs/FEDORA.md together with docs/PGVECTOR.md. Do not reapply initial schema scripts over a restored database or overwrite an unrelated database.
+
+## Privacy of shareable snapshots
+
+Transfer backups now export account/session/throttle/list tables as empty schema only. Password hashes, sessions, preferences and private lists must never be published with a shareable snapshot. Restored transfer snapshots intentionally require users to create fresh local accounts. See [the account/list guide](../ACCOUNTS_LISTS.md).

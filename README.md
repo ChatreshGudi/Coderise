@@ -1,6 +1,6 @@
 # Coderise
 
-A Codeforces practice companion built with Next.js and local PostgreSQL. Enter a public handle, inspect imported progress, browse problems, and choose practice suggestions. No registration or ownership verification is required.
+A Codeforces practice companion built with Next.js and local PostgreSQL. Enter a public handle, inspect imported progress, browse problems, and choose practice suggestions. Public browsing needs no registration or ownership verification. Optional Coderise accounts save private practice lists and profile preferences across devices.
 
 ## Return to Windows
 
@@ -27,7 +27,7 @@ py -m pip install -r requirements-web-worker.txt
 npm install
 ```
 
-If `.env` or `.venv` already exists, reuse it. Set PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD to the local PostgreSQL connection. Keep credentials out of Git.
+If `.env` or `.venv` already exists, reuse it. Set PGHOST, PGPORT, PGDATABASE, PGUSER, and PGPASSWORD to the local PostgreSQL connection. Keep credentials out of Git. Set `CODERISE_ORIGIN=http://127.0.0.1:3000` for local account access, and open that exact origin. HTTPS is required outside loopback.
 
 ### Fresh database
 
@@ -78,9 +78,10 @@ Statements are optional for browsing: missing statements link to the original Co
 - Problem-first preparation: paste a Codeforces link/ID, explore its Neo4j background map and try easier unsolved practice before retrying. Topic exploration remains available. Follow [the local graph setup](docs/LEARNING_PATH.md).
 - Problem search, rating/topic filters, imported-unsolved filtering, sorting, and pagination.
 - Statement pages with mathematical notation, examples, attempts, and related-topic problems.
-- Separate developer sync console, disabled until CODERISE_ADMIN_TOKEN is configured in the server environment.
+- Username/password accounts, saved profile preferences, and private problem lists with imported solved status.
+- Administrator-only catalogue console with database-backed role checks. See [account/list setup and security](docs/ACCOUNTS_LISTS.md).
 
-No bookmarks, learner accounts, private notes, practice queues, editor, or judge are implemented. Users submit on Codeforces. Personal statistics and solved exclusions reflect imported history, currently up to 2,000 recent submissions per handle.
+Private named problem lists are implemented. Private notes, editor, and judge are not implemented. Users submit on Codeforces. Personal statistics and solved exclusions reflect imported history, currently up to 2,000 recent submissions per handle.
 
 ## Checks
 

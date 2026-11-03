@@ -1,8 +1,11 @@
 # Coderise: how the project works
 
+> Current account update: username/password authentication, revocable database sessions, profile preferences and private lists are implemented. Public Codeforces data remains accessible. Administrator accounts replace the old shared token. Read [the account/list guide](ACCOUNTS_LISTS.md) for the new tables, flows and security. Earlier public-only descriptions refer to the original version.
+
+
 For detailed guides by subsystem, start with [the implementation guide index](explained/README.md). This file is the shorter overview.
 
-This guide explains the implemented project for a course presentation. Coderise currently works through public Codeforces handles without learner login.
+This guide explains the implemented project for a course presentation. Coderise supports public browsing and optional Coderise accounts.
 
 ## 1. What problem are we solving?
 
@@ -44,7 +47,7 @@ Main API examples:
 - `/api/path`: preparation for a problem or topic exploration.
 - `/api/sync`: starts or reuses a public-profile import job.
 
-The protected developer console controls catalogue operations using the existing developer token. It is separate from public browsing.
+The protected developer console checks the signed-in account administrator role in PostgreSQL. It is separate from public browsing.
 
 ## 5. PostgreSQL: the source of truth
 

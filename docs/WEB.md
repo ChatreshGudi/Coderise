@@ -1,6 +1,6 @@
 # Coderise web workspace
 
-The Next.js app follows the supplied Stitch screenshots as visual inspiration. It implements handle-only access, the Dashboard, Recommendations, Problems, problem details, and a separate protected developer sync console. There are no learner accounts, bookmarks, notes, or practice queues.
+The Next.js app follows the supplied Stitch screenshots as visual inspiration. It implements handle-only access, the Dashboard, Recommendations, Problems, problem details, and a separate protected developer sync console. Optional accounts now save profile preferences and private problem lists. See [ACCOUNTS_LISTS.md](ACCOUNTS_LISTS.md) for migration 008, login, security and administrator setup.
 
 ## Run locally
 
@@ -47,7 +47,7 @@ The website uses `recommend_practice`, an explicit initial difficulty/topic/popu
 
 ## Developer console
 
-Set CODERISE_ADMIN_TOKEN to a long random value in the server environment, restart Next.js, and open `/admin/sync`. The console is disabled if that setting is absent. This is separate developer access, not a learner registration system. Do not put the token in a URL or commit it. The session cookie is HTTP-only, SameSite Strict, expires after one hour, and is Secure in production. Catalogue actions require developer access and an Origin check. The console shows real job logs and statement coverage. Statement and model imports remain explicit scripts.
+Sign in with a locally provisioned administrator account. Public signup always creates a regular account. `npm run account:manage -- create-admin USERNAME` securely prompts for an administrator password. The old shared token no longer grants access. Catalogue operations check the current database role and browser Origin. See [ACCOUNTS_LISTS.md](ACCOUNTS_LISTS.md).
 
 ## Checks
 

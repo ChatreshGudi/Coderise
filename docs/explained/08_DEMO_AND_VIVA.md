@@ -1,5 +1,8 @@
 # Presentation walkthrough and viva
 
+> Current account update: username/password authentication, revocable database sessions, profile preferences and private lists are implemented. Public Codeforces data remains accessible. Administrator accounts replace the old shared token. Read [the account/list guide](../ACCOUNTS_LISTS.md) for the new tables, flows and security. Earlier public-only descriptions refer to the original version.
+
+
 ## 11. Why use these three database paradigms?
 
 | Paradigm | Reason in Coderise | Visible result |
